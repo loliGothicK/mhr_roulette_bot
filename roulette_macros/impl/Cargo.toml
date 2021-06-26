@@ -1,0 +1,19 @@
+[package]
+name = "roulette-macros-impl"
+version = "0.1.0"
+edition = "2018"
+
+[dev-dependencies]
+difference = "2.0.0"
+indoc = "1.0.3"
+
+[dependencies]
+anyhow = "1.0.41"
+proc-macro-error = "1.0.4"
+proc-macro2 = "1.0.27"
+quote = "1.0.9"
+syn = { version = "1.0.73", features = ["full"] }
+thiserror = "1.0.25"
+
+[lib]
+proc-macro = true

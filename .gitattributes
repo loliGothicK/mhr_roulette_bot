@@ -1,0 +1,15 @@
+# texts
+*.rs           text eol=lf
+*.md            text eol=lf
+*.toml          text eol=lf
+*.txt           text eol=lf
+*.json           text eol=lf
+.gitattributes  text eol=lf
+.gitignore      text eol=lf
+.gitmodules     text eol=lf
+Dockerfile      text eol=lf
+
+# images
+*.jpg   filter=lfs diff=lfs merge=lfs -text
+*.jpeg  filter=lfs diff=lfs merge=lfs -text
+*.png   filter=lfs diff=lfs merge=lfs -text
