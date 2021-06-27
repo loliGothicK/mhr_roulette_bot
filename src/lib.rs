@@ -25,3 +25,4 @@ pub mod global;
 pub mod model;
 pub mod parser;
 pub mod stream;
+pub mod github;

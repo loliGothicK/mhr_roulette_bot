@@ -2,7 +2,7 @@
 #![feature(backtrace)]
 
 use mhr_roulette::{
-    global,
+    global, github,
     stream::{build_client, Msg},
 };
 use std::error::Error;
@@ -12,6 +12,14 @@ async fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_max_level(tracing::Level::INFO)
         .init();
+
+    github::Client::init(|builder| {
+        builder
+            .add_preview("mhr_roulette_bot")
+            .base_url(std::env::var("GITHUB_PERSONAL_TOKEN").unwrap()).unwrap()
+            .personal_token(std::env::var("GITHUB_PERSONAL_TOKEN").unwrap())
+    });
+
     let tx = global::SRX.sender();
 
     tokio::spawn(async move {

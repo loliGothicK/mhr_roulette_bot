@@ -1,4 +1,4 @@
-/target/
+/target/**
 /db/
 src/.rustc_info.json
 
