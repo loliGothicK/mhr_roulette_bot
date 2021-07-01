@@ -1,12 +1,12 @@
 [package]
 name = "mhr_roulette"
-version = "0.1.0"
+version = "1.0.0"
 authors = ["Mitama <loligothick@gmail.com>"]
 edition = "2018"
 build = "build.rs"
 
 [build-dependencies]
-built = "0.5"
+built = { version = "0.5", features = ["chrono", "git2"] }
 
 [dependencies]
 anyhow = { version = "1.0.40", features = ["backtrace"] }
@@ -38,7 +38,9 @@ indoc = "1.0.3"
 tokio = { version = "1.5.0", features = ["macros", "rt-multi-thread"] }
 byteorder = "1.4.3"
 sqlite = "0.26.0"
-# roulette_macros = { version = "0.1.0", path = "roulette_macros" }
+http = "0.2.4"
+roulette_macros = { version = "0.1.0", path = "roulette_macros" }
+tracing-appender = "0.1.2"
 
 [dependencies.serenity]
 version = "0.10.8"

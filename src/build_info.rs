@@ -1,6 +1,25 @@
-// The file has been placed there by the build script.
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
 #[doc(hidden)]
 mod internal {
+    // Automatically generate and include `built.rs` every time a build.
     include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
@@ -64,9 +83,6 @@ pub const NUM_JOBS: u32 = internal::NUM_JOBS;
 #[doc = r#"Value of DEBUG for the profile used during compilation."#]
 #[allow(dead_code)]
 pub const DEBUG: bool = internal::DEBUG;
-#[doc = r#"The features that were enabled during compilation."#]
-#[allow(dead_code)]
-pub const FEATURES: [&str; 0] = internal::FEATURES;
 #[doc = r#"The features as a comma-separated string."#]
 #[allow(dead_code)]
 pub const FEATURES_STR: &str = internal::FEATURES_STR;
@@ -76,12 +92,25 @@ pub const RUSTC_VERSION: &str = internal::RUSTC_VERSION;
 #[doc = r#"The output of `rustdoc -V`"#]
 #[allow(dead_code)]
 pub const RUSTDOC_VERSION: &str = internal::RUSTDOC_VERSION;
+#[doc = r#"If the crate was compiled from within a git-repository, `GIT_VERSION` contains HEAD's tag. The short commit id is used if HEAD is not tagged."#]
+#[allow(dead_code)]
+pub const GIT_VERSION: Option<&str> = internal::GIT_VERSION;
+#[doc = r#"If the repository had dirty/staged files."#]
+#[allow(dead_code)]
+pub const GIT_DIRTY: Option<bool> = internal::GIT_DIRTY;
+#[doc = r#"If the crate was compiled from within a git-repository, `GIT_HEAD_REF` contains full name to the reference pointed to by HEAD (e.g.: `refs/heads/master`). If HEAD is detached or the branch name is not valid UTF-8 `None` will be stored.
+"#]
+#[allow(dead_code)]
+pub const GIT_HEAD_REF: Option<&str> = internal::GIT_HEAD_REF;
+#[doc = r#"If the crate was compiled from within a git-repository, `GIT_COMMIT_HASH` contains HEAD's full commit SHA-1 hash."#]
+#[allow(dead_code)]
+pub const GIT_COMMIT_HASH: Option<&str> = internal::GIT_COMMIT_HASH;
 #[doc = r#"An array of effective dependencies as documented by `Cargo.lock`."#]
 #[allow(dead_code)]
-pub const DEPENDENCIES: [(&str, &str); 216] = internal::DEPENDENCIES;
-#[doc = r#"The effective dependencies as a comma-separated string."#]
-#[allow(dead_code)]
 pub const DEPENDENCIES_STR: &str = internal::DEPENDENCIES_STR;
+#[doc = r#"The build time in RFC2822, UTC."#]
+#[allow(dead_code)]
+pub const BUILT_TIME_UTC: &str = internal::BUILT_TIME_UTC;
 #[doc = r#"The target architecture, given by `CARGO_CFG_TARGET_ARCH`."#]
 #[allow(dead_code)]
 pub const CFG_TARGET_ARCH: &str = internal::CFG_TARGET_ARCH;

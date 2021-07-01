@@ -1,3 +1,22 @@
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -6,10 +25,11 @@ use lazy_regex::{lazy_regex, regex_captures, Regex};
 use once_cell::sync::Lazy;
 use strum::IntoEnumIterator;
 
-use crate::model::response::Choices;
 use crate::{
     concepts::SameAs,
-    data::{Monster, Weapon},
+    data::{Monster, QuestID, Weapon},
+    error::CommandError,
+    model::response::Choices,
 };
 
 static QUEST_ID_REGEX: Lazy<Regex> = lazy_regex!("([1-9])-([0-9])+");
@@ -23,15 +43,12 @@ where
     _type: std::marker::PhantomData<T>,
 }
 
-pub struct QuestID(u32, u32);
-
 impl<'a, Args> Validated<'a, Args, QuestID>
 where
     Args: Clone + Iterator,
     <Args as Iterator>::Item: Clone + Into<String>,
 {
-    #[allow(dead_code)]
-    fn parse(&self) -> anyhow::Result<Vec<QuestID>> {
+    pub fn parse(&self) -> anyhow::Result<Vec<QuestID>> {
         self.accepted
             .clone()
             .map(|quest_id| -> anyhow::Result<QuestID> {
@@ -49,8 +66,7 @@ where
     Args: Clone + Iterator,
     <Args as Iterator>::Item: Into<String>,
 {
-    #[allow(dead_code)]
-    fn parse(&self) -> anyhow::Result<Vec<Monster>> {
+    pub fn parse(&self) -> anyhow::Result<Vec<Monster>> {
         self.accepted
             .clone()
             .map(|monster| {
@@ -67,8 +83,7 @@ where
     Args: Clone + Iterator,
     <Args as Iterator>::Item: Into<String>,
 {
-    #[allow(dead_code)]
-    fn parse(&self) -> anyhow::Result<Vec<Weapon>> {
+    pub fn parse(&self) -> anyhow::Result<Vec<Weapon>> {
         self.accepted
             .clone()
             .map(|weapon| {
@@ -144,15 +159,15 @@ where
                     _type: Default::default(),
                 },
                 || {
-                    anyhow::anyhow!(
-                        "invalid quest IDs: {:?}",
-                        self.clone()
-                            .filter_map(|quest_id| {
-                                let quest_id: String = quest_id.into();
-                                (!QUEST_ID_REGEX.is_match(quest_id.as_str())).as_some(quest_id)
-                            })
-                            .collect::<Vec<_>>()
-                    )
+                    let invalid_args = self
+                        .clone()
+                        .filter_map(|quest_id| {
+                            let quest_id: String = quest_id.into();
+                            (!QUEST_ID_REGEX.is_match(quest_id.as_str())).as_some(quest_id)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    anyhow::Error::from(CommandError::InvalidArgument { arg: invalid_args })
                 },
             )
     }
@@ -180,18 +195,18 @@ where
                     _type: Default::default(),
                 },
                 || {
-                    anyhow::anyhow!(
-                        "invalid monster(s): {:?}",
-                        self.clone()
-                            .filter_map(|monster| {
-                                let monster: String = monster.into();
-                                (!Monster::iter()
-                                    .map(|ref x| x.ja())
-                                    .any(|x| x == monster.as_str()))
-                                .as_some(monster)
-                            })
-                            .collect::<Vec<_>>()
-                    )
+                    let invalid_args = self
+                        .clone()
+                        .filter_map(|monster| {
+                            let monster: String = monster.into();
+                            (!Monster::iter()
+                                .map(|ref x| x.ja())
+                                .any(|x| x == monster.as_str()))
+                            .as_some(monster)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    anyhow::Error::from(CommandError::InvalidArgument { arg: invalid_args })
                 },
             )
     }
@@ -218,15 +233,15 @@ where
                     _type: Default::default(),
                 },
                 || {
-                    anyhow::anyhow!(
-                        "invalid weapon_key(s): {:?}",
-                        self.clone()
-                            .filter_map(|weapon_key| {
-                                let weapon_key: String = weapon_key.into();
-                                (!keys.contains(&weapon_key.as_str())).as_some(weapon_key)
-                            })
-                            .collect::<Vec<_>>()
-                    )
+                    let invalid_args = self
+                        .clone()
+                        .filter_map(|weapon_key| {
+                            let weapon_key: String = weapon_key.into();
+                            (!keys.contains(&weapon_key.as_str())).as_some(weapon_key)
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    anyhow::Error::from(CommandError::InvalidArgument { arg: invalid_args })
                 },
             )
     }

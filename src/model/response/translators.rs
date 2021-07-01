@@ -1,8 +1,26 @@
-use super::commands::*;
-use super::{Response, SlashCommand};
-use crate::concepts::SameAs;
-use crate::model::translate::TranslateTo;
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
+use super::{commands::*, Response, SlashCommand};
+use crate::{concepts::SameAs, error::LogicError, model::translate::TranslateTo};
 use anyhow::Context;
+use roulette_macros::{bailout, pretty_info};
 use serenity::model::{channel::PartialChannel, guild::Role, user::User};
 use std::collections::HashMap;
 
@@ -33,7 +51,7 @@ impl TranslateTo<String> for Response {
                 return Ok(value.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot transmute to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
     }
 }
 
@@ -47,7 +65,7 @@ impl TranslateTo<i64> for Response {
                 return Ok(value);
             }
         }
-        Err(anyhow::anyhow!("cannot transmute to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
     }
 }
 
@@ -61,7 +79,7 @@ impl TranslateTo<User> for Response {
                 return Ok(user.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot transmute to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
     }
 }
 
@@ -75,7 +93,7 @@ impl TranslateTo<Role> for Response {
                 return Ok(role.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot transmute to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
     }
 }
 
@@ -89,7 +107,7 @@ impl TranslateTo<PartialChannel> for Response {
                 return Ok(p_channel.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot transmute to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
     }
 }
 
@@ -112,7 +130,7 @@ impl TranslateTo<Commands> for Response {
                 Ok(Commands::Statistics)
             }
             unknown => Err(anyhow::anyhow!(
-                "ERROR: cannot transmute to Commands {:?}",
+                "ERROR: cannot translate to Commands {:?}",
                 unknown
             )),
         }
@@ -130,11 +148,11 @@ impl TranslateTo<Options> for Response {
                     "set" => Ok(Options::Set),
                     "add" => Ok(Options::Add),
                     "remove" => Ok(Options::Remove),
-                    _ => anyhow::bail!("ERROR: cannot transmute: {}", opt),
+                    _ => anyhow::bail!("ERROR: cannot translate: {}", opt),
                 };
             }
         }
-        Err(anyhow::anyhow!("ERROR: cannot transmute: {:?}", &self))
+        Err(anyhow::anyhow!("ERROR: cannot translate: {:?}", &self))
     }
 }
 
@@ -149,11 +167,11 @@ impl TranslateTo<Choices> for Response {
                     "quest" => Ok(Choices::Quest),
                     "monster" => Ok(Choices::Monster),
                     "weapon" => Ok(Choices::Weapon),
-                    _ => anyhow::bail!("ERROR: cannot transmute: {}", opt),
+                    _ => anyhow::bail!("ERROR: cannot translate: {}", opt),
                 };
             }
         }
-        Err(anyhow::anyhow!("ERROR: cannot transmute: {:?}", &self))
+        Err(anyhow::anyhow!("ERROR: cannot translate: {:?}", &self))
     }
 }
 
@@ -169,11 +187,11 @@ impl TranslateTo<About> for Response {
                     "monster" => Ok(About::Monster),
                     "weapon" => Ok(About::Weapon),
                     "members" => Ok(About::Members),
-                    _ => anyhow::bail!("ERROR: cannot transmute: {}", opt),
+                    _ => anyhow::bail!("ERROR: cannot translate: {}", opt),
                 };
             }
         }
-        Err(anyhow::anyhow!("ERROR: cannot transmute: {:?}", &self))
+        Err(anyhow::anyhow!("ERROR: cannot translate: {:?}", &self))
     }
 }
 
@@ -230,7 +248,18 @@ impl TranslateTo<SettingsSubCommands> for &[Response] {
                 ))
             }
             // start without sub-command
-            _ => Err(anyhow::anyhow!("error: cannot transmute {:?}", &self)),
+            unknown => {
+                let expr = stringify!(self);
+                let typename = std::any::type_name_of_val(unknown);
+                bailout!(
+                    "Unknown sub-command",
+                    LogicError::UnreachableGuard {
+                        expr: format!("{expr}: {typename}"),
+                        value: format!("{unknown:?}"),
+                        info: pretty_info!(),
+                    }
+                );
+            }
         }
     }
 }
@@ -272,7 +301,18 @@ impl TranslateTo<StatisticsSubCommands> for &[(String, Response)] {
                 })
             }
             // start without sub-command
-            _ => Err(anyhow::anyhow!("error: cannot transmute {:?}", &self)),
+            unknown => {
+                let expr = stringify!(self);
+                let typename = std::any::type_name_of_val(unknown);
+                bailout!(
+                    "Unknown sub-command",
+                    LogicError::UnreachableGuard {
+                        expr: format!("{expr}: {typename}"),
+                        value: format!("{unknown:?}"),
+                        info: pretty_info!(),
+                    }
+                );
+            }
         }
     }
 }
