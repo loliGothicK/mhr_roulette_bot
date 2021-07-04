@@ -16,7 +16,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --all-features -- -D warnings
 
-  format:
+  rustfmt_check:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
@@ -26,11 +26,11 @@ jobs:
           toolchain: nightly
           components: rustfmt
           override: true
-      - uses: LoliGothick/rustfmt-check@v0.1.8
+      - uses: LoliGothick/rustfmt-check@v0.2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           flags: --all
-          args: --check --config-path=rustfmt_for_actions.toml
+          args: --config-path=rustfmt_for_actions.toml
 
   test:
     name: Run Cargo Test
