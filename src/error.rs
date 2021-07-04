@@ -17,6 +17,7 @@
  *
  */
 
+#![allow(clippy::nonstandard_macro_braces)]
 use std::fmt::Debug;
 use strum_macros::ToString;
 use thiserror::Error;

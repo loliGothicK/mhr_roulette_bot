@@ -17,6 +17,7 @@
  *
  */
 
+#![allow(clippy::nonstandard_macro_braces)]
 use rand::distributions::{Distribution, Uniform};
 
 use strum_macros::EnumIter;

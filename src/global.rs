@@ -122,18 +122,18 @@ pub static QUESTS: Lazy<Vec<Vec<Quest>>> = Lazy::new(|| {
             Quest("溶岩洞の探索ツアー", "溶岩洞の探索（上位）"),
             Quest("溶岩洞の探索ツアー", "溶岩洞の探索（下位）"),
         ],
-        vec! {
+        vec![
             // ★1 （下位クエスト）
             // Sorry, not implemented yet
-        },
-        vec! {
+        ],
+        vec![
             // ★2 （下位クエスト）
             // Sorry, not implemented yet
-        },
-        vec! {
+        ],
+        vec![
             // ★3 （下位クエスト）
             // Sorry, not implemented yet
-        },
+        ],
         vec![
             // ★4 （上位クエスト）
             Quest("取り巻くつむじ風", "オサイズチ ×1"),

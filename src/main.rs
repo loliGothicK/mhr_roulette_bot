@@ -34,15 +34,9 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // prepare tracing subscriber
-    let file_appender = tracing_appender::rolling::hourly(
-        std::env::var("LOG_OUTPUT_PATH").unwrap(),
-        "roulette.log",
-    );
+    let file_appender = tracing_appender::rolling::hourly(std::env::var("LOG_OUTPUT_PATH").unwrap(), "roulette.log");
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-    tracing_subscriber::fmt()
-        .with_writer(non_blocking)
-        .with_max_level(tracing::Level::DEBUG)
-        .init();
+    tracing_subscriber::fmt().with_writer(non_blocking).with_max_level(tracing::Level::DEBUG).init();
 
     // initialize github client
     github::Client::init(|builder: OctocrabBuilder| -> anyhow::Result<_> {

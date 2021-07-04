@@ -17,6 +17,7 @@
  *
  */
 
+#![allow(clippy::nonstandard_macro_braces)]
 use anyhow::Context;
 use itertools::{zip, Itertools};
 use rand::{
