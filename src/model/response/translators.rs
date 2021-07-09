@@ -61,11 +61,15 @@ impl TranslateTo<i64> for Response {
         T: SameAs<i64>,
     {
         if let Response::SlashCommand(SlashCommand::Option(boxed)) = self {
-            if let OptionValue::Integer(value) = **boxed {
-                return Ok(value);
-            }
+            return match &**boxed {
+                OptionValue::Integer(value) => Ok(*value),
+                OptionValue::String(value) if value.parse::<i64>().is_ok() => {
+                    Ok(value.parse::<i64>().unwrap())
+                }
+                _ => Err(anyhow::anyhow!("cannot translate to Integer: {:?}", &self)),
+            };
         }
-        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to Integer: {:?}", &self))
     }
 }
 
@@ -79,7 +83,7 @@ impl TranslateTo<User> for Response {
                 return Ok(user.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to User: {:?}", &self))
     }
 }
 
@@ -93,7 +97,7 @@ impl TranslateTo<Role> for Response {
                 return Ok(role.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to Role: {:?}", &self))
     }
 }
 
@@ -107,7 +111,7 @@ impl TranslateTo<PartialChannel> for Response {
                 return Ok(p_channel.clone());
             }
         }
-        Err(anyhow::anyhow!("cannot translate to String: {:?}", &self))
+        Err(anyhow::anyhow!("cannot translate to Channel: {:?}", &self))
     }
 }
 
