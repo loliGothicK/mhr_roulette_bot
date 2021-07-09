@@ -247,10 +247,15 @@ impl Display for Body {
 
                 ## Stack Backtrace
                 ```
-                {:?}
+                {}
                 ```
             "#},
-            summary, env, backtrace
+            summary,
+            env,
+            backtrace
+                .as_ref()
+                .map(String::as_str)
+                .unwrap_or_else(|| &"Unavailable.")
         );
         write!(f, "{}", body)
     }
@@ -260,7 +265,7 @@ async fn create_issue(title: &str, label: &str, body: &Body) -> anyhow::Result<I
     match Client::global() {
         Some(client) => client
             .issues("LoliGothick", "mhr_roulette_bot")
-            .create(format!("triage({label:?}): {title}"))
+            .create(format!("triage({label}): {title}"))
             .body(format!("{body}"))
             .labels(vec![label.to_string()])
             .send()

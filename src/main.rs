@@ -71,7 +71,11 @@ async fn main() -> anyhow::Result<()> {
                     kind: "client error".into(),
                     tag: TriageTag::NotBad,
                     cause: format!("Client error: {why}"),
-                    backtrace: format!("Client error: {:?}", why.backtrace()),
+                    backtrace: format!(
+                        "Client error: {}",
+                        why.backtrace()
+                            .map_or_else(|| "None".to_owned(), |bt| format!("{}", bt))
+                    ),
                 })
                 .await;
         }

@@ -170,7 +170,7 @@ impl EventHandler for Handler {
                     .send(Msg::Issue {
                         kind: err.kind().to_string(),
                         tag: err.triage().unwrap_or(TriageTag::NotBad),
-                        cause: format!("{err}"),
+                        cause: format!("{err:?}"),
                         backtrace: format!("{}", err.backtrace()),
                     })
                     .await;
