@@ -1,14 +1,41 @@
-use crate::executors::*;
-use crate::model::request::Request;
-use crate::model::response::{Commands, Response};
-use crate::model::translate::TranslateTo;
-use itertools::Itertools;
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
 
+use crate::{
+    error::LogicError,
+    executors::*,
+    model::{
+        request::Request,
+        response::{Commands, Response},
+        translate::TranslateTo,
+    },
+};
+use itertools::Itertools;
+use roulette_macros::{bailout, pretty_info};
+
+#[tracing::instrument]
 pub fn interaction_endpoint(items: &[(String, Response)]) -> anyhow::Result<Request> {
+    tracing::debug!(got = ?items);
     match items {
         [first, options @ ..] => {
             if let Ok(command) = first.1.translate_to::<Commands>() {
-                let option_values = options.values().iter().cloned().collect_vec();
+                let option_values = options.iter().map(|(_, v)| v).cloned().collect_vec();
                 match command {
                     Commands::Settings => settings(&option_values),
                     Commands::Generate => generate(&option_values),
@@ -16,87 +43,25 @@ pub fn interaction_endpoint(items: &[(String, Response)]) -> anyhow::Result<Requ
                     Commands::Version => Ok(version().unwrap()),
                 }
             } else {
-                anyhow::bail!(
-                    "FATAL ERROR: Got unknown slash commands or component interactions `{:?}`",
-                    first
-                );
+                let expr = stringify!(first);
+                let typename = std::any::type_name_of_val(first);
+                bailout!(
+                    "FATAL ERROR: Got unknown slash commands or component interactions",
+                    LogicError::UnreachableGuard {
+                        expr: format!("{expr}: {typename}"),
+                        value: format!("{first:?}"),
+                        info: pretty_info!(),
+                    }
+                )
             }
         }
-        [] => anyhow::bail!("FATAL ERROR: no interaction"),
-    }
-}
-
-pub struct Values_<'a> {
-    slice: &'a [(String, Response)],
-    count: usize,
-}
-
-pub trait Values {
-    fn values(&self) -> Values_<'_>;
-}
-
-impl<'a> Values for &'a [(String, Response)] {
-    fn values(&self) -> Values_<'a> {
-        Values_ {
-            slice: self,
-            count: 0,
-        }
-    }
-}
-
-impl<'a> Values_<'a> {
-    pub fn iter(&'a mut self) -> impl Iterator<Item = &'a Response> {
-        self
-    }
-}
-
-impl<'a> std::iter::Iterator for Values_<'a> {
-    type Item = &'a Response;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.count != self.slice.len() {
-            self.count += 1;
-            Some(&self.slice[self.count - 1].1)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct Keys_<'a> {
-    slice: &'a [(String, Response)],
-    count: usize,
-}
-
-pub trait Keys {
-    fn keys(&self) -> Keys_<'_>;
-}
-
-impl<'a> Keys for &'a [(String, Response)] {
-    fn keys(&self) -> Keys_<'a> {
-        Keys_ {
-            slice: self,
-            count: 0,
-        }
-    }
-}
-
-impl<'a> Keys_<'a> {
-    #[allow(dead_code)]
-    pub fn iter(&'a mut self) -> impl Iterator<Item = &'a String> {
-        self
-    }
-}
-
-impl<'a> std::iter::Iterator for Keys_<'a> {
-    type Item = &'a String;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.count != self.slice.len() {
-            self.count += 1;
-            Some(&self.slice[self.count - 1].0)
-        } else {
-            None
-        }
+        [] => bailout!(
+            "No interaction",
+            LogicError::UnreachableGuard {
+                expr: "[]".to_owned(),
+                value: "[]".to_owned(),
+                info: pretty_info!()
+            }
+        ),
     }
 }

@@ -1,3 +1,22 @@
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
 use anyhow::{anyhow, Context};
 use serenity::{
     async_trait,
@@ -11,17 +30,22 @@ use serenity::{
         },
     },
 };
-use std::env;
-use std::fmt::Debug;
+use std::{env, fmt::Debug};
 use tracing::{span, Level};
 
-use crate::concepts::SameAs;
-use crate::executors::interaction_endpoint;
-use crate::model::request::{Message, Request};
-use crate::{global, model::request, parser::Parser};
-use serenity::builder::CreateEmbed;
-use serenity::utils::Colour;
-use crate::global::SRX;
+use crate::{
+    concepts::SameAs,
+    error::{ErrorExt, TriageTag},
+    executors::interaction_endpoint,
+    global,
+    global::CENTRAL,
+    model::{
+        request,
+        request::{Message, Request},
+    },
+    parser::Parser,
+};
+use serenity::{builder::CreateEmbed, utils::Colour};
 
 pub trait MsgSender<Msg: Debug> {
     fn send_msg(self)
@@ -34,7 +58,7 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
     where
         Self: SameAs<anyhow::Result<T>>,
     {
-        let tx = global::SRX.sender();
+        let tx = global::CENTRAL.sender();
         match self {
             Ok(msg) => {
                 tokio::spawn(async move {
@@ -50,6 +74,8 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
                 tokio::spawn(async move {
                     let _ = tx
                         .send(Msg::Issue {
+                            kind: "http error".into(),
+                            tag: TriageTag::NotBad,
                             cause: format!("{err}"),
                             backtrace: format!("{}", err.backtrace()),
                         })
@@ -60,25 +86,31 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
     }
 }
 
-/// Handler for bot
+/// Handler for the BOT
 #[derive(Debug)]
 struct Handler;
 
-#[allow(dead_code)]
+/// Message sections for Sender/Receiver
 #[derive(Debug)]
 pub enum Msg {
+    /// Message that report issues
     Issue {
+        kind: String,
+        tag: TriageTag,
         cause: String,
         backtrace: String,
     },
+    /// Message that useful information
     Info {
         title: String,
         description: Option<String>,
     },
+    /// Message that detailed information
     Debug {
         title: String,
         description: Option<String>,
     },
+    /// Message for event trigger
     Event {
         title: String,
         description: Option<String>,
@@ -112,7 +144,6 @@ impl EventHandler for Handler {
             .transpose()
             .and_then(|maybe_items| maybe_items.ok_or_else(|| anyhow!("no interaction data")))
             .and_then(|items| interaction_endpoint(&items));
-
         match interaction_result {
             Err(err) => {
                 let mut embed = CreateEmbed::default();
@@ -134,9 +165,12 @@ impl EventHandler for Handler {
                     .map_err(|#[allow(unused)] err| anyhow!("http error: {err} with {json:?}"))
                     .send_msg();
 
-                let _ = SRX.sender()
+                let _ = CENTRAL
+                    .sender()
                     .send(Msg::Issue {
-                        cause: format!("{err}"),
+                        kind: err.kind().to_string(),
+                        tag: err.triage().unwrap_or(TriageTag::NotBad),
+                        cause: format!("{err:?}"),
                         backtrace: format!("{}", err.backtrace()),
                     })
                     .await;
@@ -226,7 +260,14 @@ impl EventHandler for Handler {
     }
 }
 
-pub async fn build_client() -> anyhow::Result<Client> {
+/// # Prepare BOT Client
+/// 1. Read the configure toml file.
+/// 2. Read the discord token from environment variable `DISCORD_TOKEN`.
+/// 3. Read the Bot's application ID from environment variable `APPLICATION_ID`.
+/// 4. Establish HTTP connection.
+/// 5. Post requests for slash commands to Discord.
+/// 6. Finally, build the bot client.
+pub async fn prepare_bot_client() -> anyhow::Result<Client> {
     println!(
         "------config.toml-------\n{}------------------------",
         toml::to_string_pretty(&*crate::global::CONFIG.lock().unwrap())?

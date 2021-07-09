@@ -17,11 +17,19 @@
  *
  */
 
-mod commands;
-mod component;
-mod structure;
-pub mod translators;
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+pub(crate) enum JobStatus {
+    Pending,
+    ExitSuccess,
+    ExitFailure,
+}
 
-pub use commands::*;
-pub use component::*;
-pub use structure::*;
+pub struct ExitGuard {
+    pub(crate) finally: Box<dyn FnMut()>,
+}
+
+impl Drop for ExitGuard {
+    fn drop(&mut self) {
+        (self.finally)();
+    }
+}

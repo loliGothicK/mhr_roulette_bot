@@ -17,11 +17,8 @@
  *
  */
 
-mod commands;
-mod component;
-mod structure;
-pub mod translators;
+mod builder;
+mod client;
 
-pub use commands::*;
-pub use component::*;
-pub use structure::*;
+pub use builder::{CreateIssue, IssueBuilder};
+pub use client::Client;

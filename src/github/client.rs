@@ -17,11 +17,29 @@
  *
  */
 
-mod commands;
-mod component;
-mod structure;
-pub mod translators;
+use octocrab::OctocrabBuilder;
+use once_cell::sync::OnceCell;
 
-pub use commands::*;
-pub use component::*;
-pub use structure::*;
+pub static GITHUB_CLIENT: OnceCell<Client> = OnceCell::new();
+
+#[derive(Debug)]
+pub struct Client {
+    client: octocrab::Octocrab,
+}
+
+impl Client {
+    pub fn init<Builder>(builder: Builder) -> anyhow::Result<()>
+    where
+        Builder: FnOnce(OctocrabBuilder) -> anyhow::Result<OctocrabBuilder>,
+    {
+        GITHUB_CLIENT
+            .set(Client {
+                client: builder(OctocrabBuilder::new())?.build()?,
+            })
+            .map_err(|_| anyhow::anyhow!("Failed to set github client."))
+    }
+
+    pub fn global() -> Option<&'static octocrab::Octocrab> {
+        GITHUB_CLIENT.get().map(|github| &github.client)
+    }
+}

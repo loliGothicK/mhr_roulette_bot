@@ -1,17 +1,49 @@
-use itertools::Itertools;
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
+#![allow(clippy::nonstandard_macro_braces)]
 use anyhow::Context;
+use itertools::Itertools;
 use serenity::model::user::User;
-use std::collections::HashSet;
-use std::sync::{Arc, Condvar, Mutex};
-use std::{thread, time::Duration};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Condvar, Mutex},
+    thread,
+    time::Duration,
+};
 use thiserror::Error;
 
-use crate::data::{Pick, Range};
-use crate::global::{sync_all, CONFIG, CONN};
-use crate::model::request::{Message, Request};
-use crate::model::response::{About, Choices, Options, Response, SettingsSubCommands};
-use crate::model::translate::TranslateTo;
-use crate::parser::Validator;
+use super::utility::JobStatus;
+use crate::{
+    data::{Monster, QuestID, Range, Weapon},
+    error::{CommandError, QueryError},
+    global::{sync_all, CONFIG, CONN, QUESTS},
+    model::{
+        request::{Message, Request},
+        response::{About, Choices, Options, Response, SettingsSubCommands},
+        translate::TranslateTo,
+    },
+    parser::ValidateFor,
+};
+use roulette_macros::bailout;
+
+use crate::concepts::SameAs;
 
 /// # settings command
 ///
@@ -59,7 +91,12 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             } else {
                 format!(
                     "Target quest(s):\n{}",
-                    settings.target.quest.iter().join("\n")
+                    settings
+                        .target
+                        .quest
+                        .iter()
+                        .map(|id| { QUESTS[id.0 as usize][id.1 as usize].title() })
+                        .join("\n")
                 )
             };
             let excluded_quests = if settings.excluded.quest.is_empty() {
@@ -67,7 +104,12 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             } else {
                 format!(
                     "Excluded quest(s):\n{}",
-                    settings.excluded.quest.iter().join("\n")
+                    settings
+                        .excluded
+                        .quest
+                        .iter()
+                        .map(|id| format!("{}-{}", id.0, id.1))
+                        .join("\n")
                 )
             };
             Message::String(format!(
@@ -85,7 +127,7 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             } else {
                 format!(
                     "Target monster(s):\n{}",
-                    settings.target.monster.iter().join("\n")
+                    settings.target.monster.iter().map(Monster::ja).join("\n")
                 )
             };
             let excluded_monsters = if settings.excluded.monster.is_empty() {
@@ -93,7 +135,7 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             } else {
                 format!(
                     "Excluded monster(s):\n{}",
-                    settings.excluded.monster.iter().join("\n")
+                    settings.excluded.monster.iter().map(Monster::ja).join("\n")
                 )
             };
             Message::String(format!(
@@ -109,7 +151,7 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             } else {
                 Message::String(format!(
                     "Excluded weapon(s):\n{}",
-                    settings.excluded.weapon.iter().join("\n")
+                    settings.excluded.weapon.iter().map(Weapon::ja).join("\n")
                 ))
             }
         }
@@ -122,26 +164,24 @@ fn info(about: About) -> anyhow::Result<Request, !> {
 
 #[derive(Debug, Error)]
 enum Query {
-    #[error(r#"
+    #[error(
+        r#"
         INSERT INTO hunters (id, name) VALUES ({id:?}, {name:?})
             ON CONFLICT (id)
                 DO UPDATE SET
                     name = {name:?},
                     updated_at = datetime('now', 'localtime')
-    "#)]
-    UpsetMember {
-        id: u64,
-        name: String,
-    }
+    "#
+    )]
+    UpsetMember { id: u64, name: String },
 }
 
 /// Change current member as specified in `opt`.
 fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
-    #[allow(clippy::mutex_atomic)]
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
-    thread::spawn(move || -> anyhow::Result<()> {
+    let handle = thread::spawn(move || -> anyhow::Result<()> {
         let (lock, cvar) = &*pair2;
         loop {
             if let Ok(ref mut config) = conf.try_lock() {
@@ -163,22 +203,26 @@ fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
                 }
 
                 // We should Upset members name
-                let mut pending = lock.lock().unwrap();
+                let mut status = lock.lock().unwrap();
                 let conn = CONN.lock().unwrap();
 
                 for user in users.iter() {
-                    let query = Query::UpsetMember { id: user.id.0, name: user.name.clone() };
-                    if let Err(err) = conn.execute(format!("{query}"))
-                        .with_context(|| anyhow::anyhow!("Failed to query with `{query}`"))
-                    {
-                        *pending = false;
+                    let query = Query::UpsetMember {
+                        id: user.id.0,
+                        name: user.name.clone(),
+                    };
+                    if let Err(err) = conn.execute(format!("{query}")) {
+                        *status = JobStatus::ExitFailure;
                         cvar.notify_one();
-                        return Err(err);
+                        return Err(QueryError::FailedToStore {
+                            raw: format!("{err}"),
+                            query: format!("{query}"),
+                        })
+                        .with_context(|| anyhow::anyhow!("Query failed."));
                     }
                 }
 
-                let mut pending = lock.lock().unwrap();
-                *pending = false;
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
                 break Ok(());
             }
@@ -187,16 +231,31 @@ fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
     // wait for the thread to start up
     let (lock, cvar) = &*pair;
     let result = cvar
-        .wait_timeout_while(
-            lock.lock().unwrap(),
-            Duration::from_millis(100),
-            |&mut pending| pending,
-        )
+        .wait_timeout_while(lock.lock().unwrap(), Duration::from_millis(100), |status| {
+            *status == JobStatus::Pending
+        })
         .unwrap();
-    if result.1.timed_out() {
-        anyhow::bail!("thread timeout");
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            handle.join().unwrap()?;
+            break;
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "settings members".to_string(),
+                    wait_for: Duration::from_millis(100),
+                }
+            );
+        }
     }
-    sync_all()?;
+    sync_all().map_err(|err| {
+        anyhow::Error::from(CommandError::FailedToSync {
+            command: "settings members".to_string(),
+            io_error: err,
+        })
+        .context("sync_all failed.")
+    })?;
     Ok(Request::Message(Message::String(format!(
         "members = {:?}",
         CONFIG
@@ -209,10 +268,9 @@ fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
     ))))
 }
 
-/// Sets the range of target quest rank into `[lower, upper]`.
+/// Sets the range of target quest rank static_cast `[lower, upper]`.
 fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
-    #[allow(clippy::mutex_atomic)]
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
     thread::spawn(move || {
@@ -223,8 +281,8 @@ fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
                     lower: lower as usize,
                     upper: upper as usize,
                 };
-                let mut pending = lock.lock().unwrap();
-                *pending = false;
+                let mut status = lock.lock().unwrap();
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
                 break;
             }
@@ -233,127 +291,280 @@ fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
     // wait for the thread to start up
     let (lock, cvar) = &*pair;
     let result = cvar
-        .wait_timeout_while(
-            lock.lock().unwrap(),
-            Duration::from_millis(100),
-            |&mut pending| pending,
-        )
+        .wait_timeout_while(lock.lock().unwrap(), Duration::from_millis(100), |status| {
+            *status == JobStatus::Pending
+        })
         .unwrap();
-    if result.1.timed_out() {
-        anyhow::bail!("thread timeout");
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            break;
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "settings range".to_string(),
+                    wait_for: Duration::from_millis(100),
+                }
+            );
+        }
     }
-    sync_all()?;
+    sync_all().map_err(|err| {
+        anyhow::Error::from(CommandError::FailedToSync {
+            command: "settings range".to_string(),
+            io_error: err,
+        })
+        .context("sync_all failed.")
+    })?;
     Ok(Request::Message(Message::String(
         CONFIG.lock().unwrap().settings.range.as_pretty_string(),
     )))
+}
+
+trait SmartCast<T> {
+    fn smart_cast<U>(self) -> anyhow::Result<HashSet<T>>
+    where
+        U: SameAs<T>;
+}
+
+impl SmartCast<QuestID> for String {
+    fn smart_cast<U>(self) -> anyhow::Result<HashSet<QuestID>>
+    where
+        U: SameAs<QuestID>,
+    {
+        Ok(self
+            .split_whitespace()
+            .validate_for::<QuestID>()?
+            .parse()?
+            .into_iter()
+            .collect::<HashSet<_>>())
+    }
+}
+
+impl SmartCast<Monster> for String {
+    fn smart_cast<U>(self) -> anyhow::Result<HashSet<Monster>>
+    where
+        U: SameAs<Monster>,
+    {
+        Ok(self
+            .split_whitespace()
+            .validate_for::<Monster>()?
+            .parse()?
+            .into_iter()
+            .collect::<HashSet<_>>())
+    }
+}
+
+impl SmartCast<Weapon> for String {
+    fn smart_cast<U>(self) -> anyhow::Result<HashSet<Weapon>>
+    where
+        U: SameAs<Weapon>,
+    {
+        Ok(self
+            .split_whitespace()
+            .validate_for::<Weapon>()?
+            .parse()?
+            .into_iter()
+            .collect::<HashSet<_>>())
+    }
 }
 
 /// Configure excluded quest(s)/monster(s)/weapon(s).
 /// - set/add/remove: as specified in `opt`.
 /// - quest(s)/monster(s)/weapon(s): as specified in `choice`.
 fn exclude(opt: Options, choice: Choices, arg: String) -> anyhow::Result<Request> {
-    let args: HashSet<_> = arg
-        .split_whitespace()
-        .validate(choice)?
-        .into_iter()
-        .collect();
-    #[allow(clippy::mutex_atomic)]
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
-    thread::spawn(move || {
+    let handle = thread::spawn(move || -> anyhow::Result<()> {
         let (lock, cvar) = &*pair2;
         loop {
             if let Ok(ref mut config) = conf.try_lock() {
                 match opt {
-                    Options::Set => {
-                        *config.settings.excluded.pick_mut(&choice) = args;
-                    }
-                    Options::Add => {
-                        for arg in args {
-                            config.settings.excluded.pick_mut(&choice).insert(arg);
+                    Options::Set => match choice {
+                        Choices::Quest => {
+                            let quests = arg.smart_cast::<QuestID>()?;
+                            config.settings.excluded.quest = quests;
                         }
-                    }
-                    Options::Remove => {
-                        for arg in args {
-                            config.settings.excluded.pick_mut(&choice).remove(&arg);
+                        Choices::Monster => {
+                            let monsters = arg.smart_cast::<Monster>()?;
+                            config.settings.excluded.monster = monsters;
                         }
-                    }
+                        Choices::Weapon => {
+                            let weapons = arg.smart_cast::<Weapon>()?;
+                            config.settings.excluded.weapon = weapons;
+                        }
+                    },
+                    Options::Add => match choice {
+                        Choices::Quest => {
+                            for quest in arg.smart_cast::<QuestID>()? {
+                                config.settings.excluded.quest.insert(quest);
+                            }
+                        }
+                        Choices::Monster => {
+                            for monster in arg.smart_cast::<Monster>()? {
+                                config.settings.excluded.monster.insert(monster);
+                            }
+                        }
+                        Choices::Weapon => {
+                            for weapon in arg.smart_cast::<Weapon>()? {
+                                config.settings.excluded.weapon.insert(weapon);
+                            }
+                        }
+                    },
+                    Options::Remove => match choice {
+                        Choices::Quest => {
+                            for quest in arg.smart_cast::<QuestID>()? {
+                                config.settings.excluded.quest.remove(&quest);
+                            }
+                        }
+                        Choices::Monster => {
+                            for monster in arg.smart_cast::<Monster>()? {
+                                config.settings.excluded.monster.remove(&monster);
+                            }
+                        }
+                        Choices::Weapon => {
+                            for weapon in arg.smart_cast::<Weapon>()? {
+                                config.settings.excluded.weapon.remove(&weapon);
+                            }
+                        }
+                    },
                 }
-                let mut pending = lock.lock().unwrap();
-                *pending = false;
+                let mut status = lock.lock().unwrap();
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
-                break;
+                break Ok(());
             }
         }
     });
     // wait for the thread to start up
     let (lock, cvar) = &*pair;
     let result = cvar
-        .wait_timeout_while(
-            lock.lock().unwrap(),
-            Duration::from_millis(100),
-            |&mut pending| pending,
-        )
+        .wait_timeout_while(lock.lock().unwrap(), Duration::from_millis(100), |status| {
+            *status == JobStatus::Pending
+        })
         .unwrap();
-    if result.1.timed_out() {
-        anyhow::bail!("thread timeout");
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            handle.join().unwrap()?;
+            break;
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "settings exclude".to_string(),
+                    wait_for: Duration::from_millis(100),
+                }
+            );
+        }
     }
-    sync_all()?;
+    sync_all().map_err(|err| {
+        anyhow::Error::from(CommandError::FailedToSync {
+            command: "settings exclude".to_string(),
+            io_error: err,
+        })
+        .context("sync_all failed.")
+    })?;
     Ok(Request::Message(Message::String("Done!".to_string())))
 }
 
 fn target(opt: Options, choice: Choices, arg: String) -> anyhow::Result<Request> {
-    #[allow(clippy::mutex_atomic)]
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
-    thread::spawn(move || {
+    let handle = thread::spawn(move || -> anyhow::Result<()> {
         let (lock, cvar) = &*pair2;
         loop {
             if let Ok(ref mut config) = conf.try_lock() {
-                let args: HashSet<_> = arg.split_whitespace().map(String::from).collect();
                 match opt {
-                    Options::Set => {
-                        *config.settings.target.pick_mut(&choice) = args;
-                    }
-                    Options::Add => {
-                        for arg in args {
-                            config.settings.target.pick_mut(&choice).insert(arg);
+                    Options::Set => match choice {
+                        Choices::Quest => {
+                            let quests = arg.smart_cast::<QuestID>()?;
+                            config.settings.target.quest = quests;
                         }
-                    }
-                    Options::Remove => {
-                        for arg in args {
-                            config.settings.target.pick_mut(&choice).remove(&arg);
+                        Choices::Monster => {
+                            let monsters = arg.smart_cast::<Monster>()?;
+                            config.settings.target.monster = monsters;
                         }
-                    }
+                        Choices::Weapon => {
+                            let weapons = arg.smart_cast::<Weapon>()?;
+                            config.settings.target.weapon = weapons;
+                        }
+                    },
+                    Options::Add => match choice {
+                        Choices::Quest => {
+                            for quest in arg.smart_cast::<QuestID>()? {
+                                config.settings.target.quest.insert(quest);
+                            }
+                        }
+                        Choices::Monster => {
+                            for monster in arg.smart_cast::<Monster>()? {
+                                config.settings.target.monster.insert(monster);
+                            }
+                        }
+                        Choices::Weapon => {
+                            for weapon in arg.smart_cast::<Weapon>()? {
+                                config.settings.target.weapon.insert(weapon);
+                            }
+                        }
+                    },
+                    Options::Remove => match choice {
+                        Choices::Quest => {
+                            for quest in arg.smart_cast::<QuestID>()? {
+                                config.settings.target.quest.remove(&quest);
+                            }
+                        }
+                        Choices::Monster => {
+                            for monster in arg.smart_cast::<Monster>()? {
+                                config.settings.target.monster.remove(&monster);
+                            }
+                        }
+                        Choices::Weapon => {
+                            for weapon in arg.smart_cast::<Weapon>()? {
+                                config.settings.target.weapon.remove(&weapon);
+                            }
+                        }
+                    },
                 }
-                let mut pending = lock.lock().unwrap();
-                *pending = false;
+                let mut status = lock.lock().unwrap();
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
-                break;
+                break Ok(());
             }
         }
     });
     // wait for the thread to start up
     let (lock, cvar) = &*pair;
     let result = cvar
-        .wait_timeout_while(
-            lock.lock().unwrap(),
-            Duration::from_millis(100),
-            |&mut pending| pending,
-        )
+        .wait_timeout_while(lock.lock().unwrap(), Duration::from_millis(100), |status| {
+            *status == JobStatus::Pending
+        })
         .unwrap();
-    if result.1.timed_out() {
-        anyhow::bail!("thread timeout");
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            handle.join().unwrap()?;
+            break;
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "settings target".to_string(),
+                    wait_for: Duration::from_millis(100),
+                }
+            );
+        }
     }
-    sync_all()?;
+    sync_all().map_err(|err| {
+        anyhow::Error::from(CommandError::FailedToSync {
+            command: "settings target".to_string(),
+            io_error: err,
+        })
+        .context("sync_all failed.")
+    })?;
     Ok(Request::Message(Message::String("Done!".to_string())))
 }
 
 fn obliterate(choice: Choices) -> anyhow::Result<Request> {
-    #[allow(clippy::mutex_atomic)]
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
     thread::spawn(move || {
@@ -374,8 +585,8 @@ fn obliterate(choice: Choices) -> anyhow::Result<Request> {
                         config.settings.target.weapon.clear();
                     }
                 }
-                let mut pending = lock.lock().unwrap();
-                *pending = false;
+                let mut status = lock.lock().unwrap();
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
                 break;
             }
@@ -384,15 +595,29 @@ fn obliterate(choice: Choices) -> anyhow::Result<Request> {
     // wait for the thread to start up
     let (lock, cvar) = &*pair;
     let result = cvar
-        .wait_timeout_while(
-            lock.lock().unwrap(),
-            Duration::from_millis(100),
-            |&mut pending| pending,
-        )
+        .wait_timeout_while(lock.lock().unwrap(), Duration::from_millis(100), |status| {
+            *status == JobStatus::Pending
+        })
         .unwrap();
-    if result.1.timed_out() {
-        anyhow::bail!("thread timeout");
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            break;
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "settings obliterate".to_string(),
+                    wait_for: Duration::from_millis(100),
+                }
+            );
+        }
     }
-    sync_all()?;
+    sync_all().map_err(|err| {
+        anyhow::Error::from(CommandError::FailedToSync {
+            command: "settings obliterate".to_string(),
+            io_error: err,
+        })
+        .context("sync_all failed.")
+    })?;
     Ok(Request::Message(Message::String("Cleared!".to_owned())))
 }

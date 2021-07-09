@@ -1,22 +1,52 @@
+/*
+ * ISC License
+ *
+ * Copyright (c) 2021 Mitama Lab
+ *
+ * Permission to use, copy, modify, and/or distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ */
+
+#![allow(clippy::nonstandard_macro_braces)]
 use anyhow::Context;
 use itertools::{zip, Itertools};
-use rand::distributions::{Distribution, Uniform};
-use rand::seq::{IteratorRandom, SliceRandom};
-use rand::thread_rng;
-use serenity::builder::CreateEmbed;
-use serenity::utils::Colour;
+use rand::{
+    distributions::{Distribution, Uniform},
+    seq::{IteratorRandom, SliceRandom},
+    thread_rng,
+};
+use serenity::{builder::CreateEmbed, utils::Colour};
 use strum::IntoEnumIterator;
 
-use crate::data::{Monster, Order, QuestInfo, Range, Weapon};
-use crate::global::{CONFIG, CONN, OBJECTIVES, QUESTS};
-use crate::model::request::{Message, Request};
-use crate::model::response::{Choices, Response};
-use crate::model::translate::TranslateTo;
+use crate::{
+    data::{Monster, Order, Range, Weapon},
+    error::{CommandError, QueryError},
+    executors::utility::JobStatus,
+    global::{CONFIG, CONN, OBJECTIVES, QUESTS},
+    model::{
+        request::{Message, Request},
+        response::{Choices, Response},
+        translate::TranslateTo,
+    },
+};
+use roulette_macros::bailout;
 use serenity::model::user::User;
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
-use std::time::Duration;
-use sqlite::{Connection};
+use sqlite::Connection;
+use std::{
+    sync::{Arc, Condvar, Mutex},
+    thread,
+    time::Duration,
+};
 use thiserror::Error;
 
 enum GenerateType {
@@ -46,9 +76,19 @@ fn generate_impl(gen_type: GenerateType) -> anyhow::Result<Request> {
         .into_iter()
         .map(|order| format!("* {order}"))
         .join("\n");
+    let regulations = zip(
+        members.into_iter(),
+        Uniform::new(0, weapons.len())
+            .sample_iter(&mut rng)
+            .map(|idx| weapons[idx as usize]),
+    )
+    .collect_vec();
     let general_objectives: Vec<Order> = Order::iter().collect();
-    let objectives = weapons
+    let objectives = regulations
+        .iter()
+        .map(|(_, w)| w)
         .choose_multiple(&mut rng, 5 - order_num)
+        .into_iter()
         .map(|weapon| {
             OBJECTIVES
                 .get(weapon)
@@ -66,13 +106,6 @@ fn generate_impl(gen_type: GenerateType) -> anyhow::Result<Request> {
         })
         .collect::<anyhow::Result<Vec<_>>>()?
         .join("\n");
-    let regulations = zip(
-        members.into_iter(),
-        Uniform::new(0, weapons.len())
-            .sample_iter(&mut rng)
-            .map(|idx| weapons[idx as usize]),
-    )
-    .collect_vec();
     let response = match gen_type {
         GenerateType::Quest => {
             let Range { lower, upper } = config.settings.range;
@@ -127,24 +160,20 @@ enum QueryKind {
 #[derive(Debug, Error)]
 enum Query {
     #[error("INSERT INTO logs (id, weapon) VALUES ({id:?}, {weapon:?})")]
-    InsertIntoLogs {
-        id: u64,
-        weapon: String,
-    },
-    #[error(r#"
+    InsertIntoLogs { id: u64, weapon: String },
+    #[error(
+        r#"
         INSERT INTO statistics (id, {weapon:?}) VALUES ({id:?}, 1)
             ON CONFLICT (id)
                 DO UPDATE SET
                     {weapon:?} = {weapon:?} + 1
-    "#)]
-    UpsetStatistics {
-        id: u64,
-        weapon: String,
-    }
+    "#
+    )]
+    UpsetStatistics { id: u64, weapon: String },
 }
 
 fn store(data: Vec<(User, Weapon)>) -> anyhow::Result<()> {
-    let pair = Arc::new((Mutex::new(true), Condvar::new()));
+    let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conn = Arc::clone(&*CONN);
 
@@ -152,23 +181,31 @@ fn store(data: Vec<(User, Weapon)>) -> anyhow::Result<()> {
         let (lock, cvar) = &*pair2;
         loop {
             if let Ok(ref mut conn) = conn.try_lock() {
-                let mut pending = lock.lock().unwrap();
+                let mut status = lock.lock().unwrap();
 
                 // First, we should insert results into logs.
-                if let Err(err) = execute(QueryKind::InsertIntoLogs, conn, &data) {
-                    *pending = false;
+                if let Err((query, err)) = execute(QueryKind::InsertIntoLogs, conn, &data) {
+                    *status = JobStatus::ExitFailure;
                     cvar.notify_one();
-                    anyhow::bail!("Fail to query: {:?}", err);
+                    return Err(QueryError::FailedToStore {
+                        raw: format!("{err}"),
+                        query,
+                    })
+                    .with_context(|| anyhow::anyhow!("Query failed."));
                 }
 
                 // Second, we should upset statistics.
-                if let Err(err) = execute(QueryKind::UpsetStatistics, conn, &data) {
-                    *pending = false;
+                if let Err((query, err)) = execute(QueryKind::UpsetStatistics, conn, &data) {
+                    *status = JobStatus::ExitFailure;
                     cvar.notify_one();
-                    anyhow::bail!("Fail to query: {:?}", err);
+                    return Err(QueryError::FailedToStore {
+                        raw: format!("{err}"),
+                        query,
+                    })
+                    .with_context(|| anyhow::anyhow!("Query failed."));
                 }
 
-                *pending = false;
+                *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
                 break Ok(());
             }
@@ -180,35 +217,50 @@ fn store(data: Vec<(User, Weapon)>) -> anyhow::Result<()> {
         .wait_timeout_while(
             lock.lock().unwrap(),
             Duration::from_millis(1000),
-            |&mut pending| pending,
+            |status| *status == JobStatus::Pending,
         )
         .unwrap();
-    if result.1.timed_out() {
-        if *result.0 {
-            if let Err(err) = handle.join() {
-                anyhow::bail!("thread timeout: {:?}", err);
-            }
+    loop {
+        if result.0.ne(&JobStatus::Pending) {
+            break handle
+                .join()
+                .expect("Couldn't join on the associated thread");
+        } else if result.1.timed_out() {
+            bailout!(
+                "TLE",
+                CommandError::TimeLimitExceeded {
+                    command: "generate".to_string(),
+                    wait_for: Duration::from_millis(1000),
+                }
+            );
         }
-        anyhow::bail!("thread timeout in progress");
     }
-    handle.join().unwrap()
 }
 
-fn execute(kind: QueryKind, conn: &mut Connection, data: &[(User, Weapon)]) -> anyhow::Result<()> {
-    let exe = || -> anyhow::Result<()> {
-        for (user, weapon) in data {
-            match kind {
-                QueryKind::InsertIntoLogs => {
-                    let query = Query::InsertIntoLogs { id: user.id.0, weapon: weapon.to_string() };
-                    conn.execute(format!("{query}"))?;
-                }
-                QueryKind::UpsetStatistics => {
-                    let query = Query::UpsetStatistics { id: user.id.0, weapon: weapon.to_string() };
-                    conn.execute(format!("{query}"))?;
-                }
+fn execute(
+    kind: QueryKind,
+    conn: &mut Connection,
+    data: &[(User, Weapon)],
+) -> anyhow::Result<(), (String, sqlite::Error)> {
+    for (user, weapon) in data {
+        match kind {
+            QueryKind::InsertIntoLogs => {
+                let query = Query::InsertIntoLogs {
+                    id: user.id.0,
+                    weapon: weapon.to_string(),
+                };
+                conn.execute(format!("{query}"))
+                    .map_err(|err| (format!("{query}"), err))?;
+            }
+            QueryKind::UpsetStatistics => {
+                let query = Query::UpsetStatistics {
+                    id: user.id.0,
+                    weapon: weapon.to_string(),
+                };
+                conn.execute(format!("{query}"))
+                    .map_err(|err| (format!("{query}"), err))?;
             }
         }
-        Ok(())
-    };
-    exe().with_context(|| anyhow::anyhow!("Failed to query with `{query}`"))
+    }
+    Ok(())
 }
