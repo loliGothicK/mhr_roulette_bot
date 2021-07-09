@@ -222,7 +222,6 @@ fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
                     }
                 }
 
-                let mut status = lock.lock().unwrap();
                 *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
                 break Ok(());
