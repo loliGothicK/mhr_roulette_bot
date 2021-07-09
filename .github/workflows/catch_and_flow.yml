@@ -1,5 +1,16 @@
-on: push
 name: Catch and Flow
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'roulette_macros/**'
+      - 'test/**'
+      - 'Cargo.lock'
+    branches: [ 'feature/*' ]
+  pull_request:
+    branches: [ develop, master ]
+
 jobs:
   clippy_check:
     name: clippy
@@ -18,6 +29,7 @@ jobs:
             nonstandard_macro_braces
             mutex_atomic
           deny: warnings
+
   rustfmt_check:
     name: rustfmt
     runs-on: ubuntu-latest
