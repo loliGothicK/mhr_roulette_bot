@@ -28,6 +28,7 @@ pub trait Satisfied {}
 /// # Usage
 ///
 /// ```
+/// #![allow(incomplete_features)]
 /// #![feature(const_evaluatable_checked)]
 /// #![feature(const_generics)]
 /// use mhr_roulette::concepts::{Condition, Satisfied};
