@@ -17,9 +17,8 @@
  *
  */
 
-use strum_macros::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
-
 use serenity::model::user::User;
+use strum_macros::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(Debug, Clone, Copy, AsRefStr, IntoStaticStr)]
 #[strum(serialize_all = "snake_case")]
