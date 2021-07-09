@@ -20,6 +20,8 @@
 #![feature(format_args_capture)]
 #![feature(backtrace)]
 
+use chrono;
+use chrono_tz::Asia::Tokyo;
 use http::header;
 use mhr_roulette::{
     error::TriageTag,
@@ -36,7 +38,13 @@ async fn main() -> anyhow::Result<()> {
     // prepare tracing subscriber
     let file_appender = tracing_appender::rolling::hourly(
         std::env::var("LOG_OUTPUT_PATH").unwrap(),
-        "roulette.log",
+        format!(
+            "roulette-log-{}",
+            chrono::Utc::today()
+                .with_timezone(&Tokyo)
+                .format("%Y-%m-%d")
+                .to_string()
+        ),
     );
     let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
     tracing_subscriber::fmt()
