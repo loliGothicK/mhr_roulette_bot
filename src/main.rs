@@ -65,7 +65,7 @@ async fn main() -> anyhow::Result<()> {
     tokio::spawn(async move {
         let mut client = prepare_bot_client().await.expect("client");
         if let Err(why) = client.start().await {
-            let _ = global::SRX
+            let _ = global::CENTRAL
                 .sender()
                 .send(Msg::Issue {
                     kind: "client error".into(),
@@ -82,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // lock receiver
-    if let Ok(ref mut guardian) = global::SRX.receiver().try_lock() {
+    if let Ok(ref mut guardian) = global::CENTRAL.receiver().try_lock() {
         let rx = &mut *guardian;
         // streaming
         while let Some(msg) = rx.recv().await {

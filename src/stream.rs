@@ -38,7 +38,7 @@ use crate::{
     error::{ErrorExt, TriageTag},
     executors::interaction_endpoint,
     global,
-    global::SRX,
+    global::CENTRAL,
     model::{
         request,
         request::{Message, Request},
@@ -58,7 +58,7 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
     where
         Self: SameAs<anyhow::Result<T>>,
     {
-        let tx = global::SRX.sender();
+        let tx = global::CENTRAL.sender();
         match self {
             Ok(msg) => {
                 tokio::spawn(async move {
@@ -165,7 +165,7 @@ impl EventHandler for Handler {
                     .map_err(|#[allow(unused)] err| anyhow!("http error: {err} with {json:?}"))
                     .send_msg();
 
-                let _ = SRX
+                let _ = CENTRAL
                     .sender()
                     .send(Msg::Issue {
                         kind: err.kind().to_string(),

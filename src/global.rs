@@ -88,8 +88,8 @@ impl<T> Tsx<T> {
 }
 
 /// Sender/Receiver
-pub static SRX: Lazy<Tsx<Msg>> = Lazy::new(|| {
-    let (sender, receiver) = channel(32);
+pub static CENTRAL: Lazy<Tsx<Msg>> = Lazy::new(|| {
+    let (sender, receiver) = channel(8);
     Tsx {
         sender: Arc::new(sender),
         receiver: Arc::new(Mutex::new(receiver)),
