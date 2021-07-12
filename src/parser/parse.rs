@@ -18,11 +18,13 @@
  */
 
 use crate::model::response::{Component, Response, SlashCommand};
-use serenity::model::interactions::application_command::{
-    ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption,
-    ApplicationCommandOptionType,
+use serenity::model::interactions::{
+    application_command::{
+        ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption,
+        ApplicationCommandOptionType,
+    },
+    message_component::{ComponentType, MessageComponentInteractionData},
 };
-use serenity::model::interactions::message_component::{ComponentType, MessageComponentInteractionData};
 
 type DataOptions = Vec<ApplicationCommandInteractionDataOption>;
 

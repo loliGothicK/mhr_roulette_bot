@@ -25,11 +25,8 @@ use serenity::{
     model::{
         gateway::Ready,
         interactions::{
-            Interaction,
-            InteractionResponseType,
-            application_command::{
-                ApplicationCommand, ApplicationCommandOptionType,
-            }
+            application_command::{ApplicationCommand, ApplicationCommandOptionType},
+            Interaction, InteractionResponseType,
         },
     },
 };
@@ -48,10 +45,14 @@ use crate::{
     },
     parser::Parser,
 };
-use serenity::{builder::CreateEmbed, utils::Colour};
-use serenity::model::interactions::application_command::ApplicationCommandInteraction;
-use serenity::model::interactions::message_component::MessageComponentInteraction;
-use serenity::builder::CreateInteractionResponse;
+use serenity::{
+    builder::{CreateEmbed, CreateInteractionResponse},
+    model::interactions::{
+        application_command::ApplicationCommandInteraction,
+        message_component::MessageComponentInteraction,
+    },
+    utils::Colour,
+};
 
 pub trait MsgSender<Msg: Debug> {
     fn send_msg(self)
@@ -129,13 +130,19 @@ enum Interactions {
 }
 
 impl Interactions {
-    pub async fn create_interaction_response<F>(&self, http: impl AsRef<Http>, f: F) -> anyhow::Result<()>
-        where
-            F: FnOnce(&mut CreateInteractionResponse) -> &mut CreateInteractionResponse,
+    pub async fn create_interaction_response<F>(
+        &self,
+        http: impl AsRef<Http>,
+        f: F,
+    ) -> anyhow::Result<()>
+    where
+        F: FnOnce(&mut CreateInteractionResponse) -> &mut CreateInteractionResponse,
     {
         match self {
             Interactions::Command(command) => command.create_interaction_response(http, f).await?,
-            Interactions::Component(component) => component.create_interaction_response(http, f).await?,
+            Interactions::Component(component) => {
+                component.create_interaction_response(http, f).await?
+            }
         }
         Ok(())
     }
@@ -160,22 +167,33 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: serenity::client::Context, interaction: Interaction) {
         let result = {
             if let Some(command) = interaction.clone().application_command() {
-                Some(command.data.parse()
-                    .and_then(|items| interaction_endpoint(&items))
-                    .map(|ok| (ok, Interactions::Command(command.clone())))
-                    .map_err(|err| (err, Interactions::Command(command.clone()))))
-            }
-            else if let Some(component) = interaction.clone().message_component() {
-                Some(component.data.parse()
-                    .and_then(|items| interaction_endpoint(&items))
-                    .map(|ok| (ok, Interactions::Component(component.clone())))
-                    .map_err(|err| (err, Interactions::Component(component.clone()))))
+                Some(
+                    command
+                        .data
+                        .parse()
+                        .and_then(|items| interaction_endpoint(&items))
+                        .map(|ok| (ok, Interactions::Command(command.clone())))
+                        .map_err(|err| (err, Interactions::Command(command.clone()))),
+                )
+            } else if let Some(component) = interaction.clone().message_component() {
+                Some(
+                    component
+                        .data
+                        .parse()
+                        .and_then(|items| interaction_endpoint(&items))
+                        .map(|ok| (ok, Interactions::Component(component.clone())))
+                        .map_err(|err| (err, Interactions::Component(component.clone()))),
+                )
             } else {
                 None
             }
         };
         // un-expected interaction => skip
-        let result = if result.is_none() { return; } else { result.unwrap() };
+        let result = if result.is_none() {
+            return;
+        } else {
+            result.unwrap()
+        };
         match result {
             Err((err, interactions)) => {
                 let mut embed = CreateEmbed::default();
