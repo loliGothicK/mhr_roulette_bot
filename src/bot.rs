@@ -83,7 +83,7 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
                         .send(Msg::Issue {
                             kind: "http error".into(),
                             tag: TriageTag::NotBad,
-                            cause: format!("{err}"),
+                            cause: format!("{err:?}"),
                             backtrace: format!("{}", err.backtrace()),
                         })
                         .await;
@@ -126,7 +126,7 @@ pub enum Msg {
 
 enum Interactions {
     Command(ApplicationCommandInteraction),
-    Component(MessageComponentInteraction),
+    Component(Box<MessageComponentInteraction>),
 }
 
 impl Interactions {
@@ -141,7 +141,7 @@ impl Interactions {
         match self {
             Interactions::Command(command) => command.create_interaction_response(http, f).await?,
             Interactions::Component(component) => {
-                component.create_interaction_response(http, f).await?
+                (*component).create_interaction_response(http, f).await?
             }
         }
         Ok(())
@@ -181,18 +181,18 @@ impl EventHandler for Handler {
                         .data
                         .parse()
                         .and_then(|items| interaction_endpoint(&items))
-                        .map(|ok| (ok, Interactions::Component(component.clone())))
-                        .map_err(|err| (err, Interactions::Component(component.clone()))),
+                        .map(|ok| (ok, Interactions::Component(Box::new(component.clone()))))
+                        .map_err(|err| (err, Interactions::Component(Box::new(component.clone())))),
                 )
             } else {
                 None
             }
         };
         // un-expected interaction => skip
-        let result = if result.is_none() {
-            return;
+        let result = if let Some(res) = result {
+            res
         } else {
-            result.unwrap()
+            return;
         };
         match result {
             Err((err, interactions)) => {
@@ -200,7 +200,7 @@ impl EventHandler for Handler {
                 embed
                     .colour(Colour::RED)
                     .title("INTERACTION ERROR:")
-                    .description(format!("{err}"));
+                    .description(format!("{err:?}"));
 
                 let json = serde_json::to_string(&embed.0);
 

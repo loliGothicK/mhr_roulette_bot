@@ -31,7 +31,7 @@ use thiserror::Error;
 
 use super::utility::JobStatus;
 use crate::{
-    data::{Monster, QuestID, Range, Weapon},
+    data::{Monster, QuestID, TargetRank, Weapon},
     error::{CommandError, QueryError},
     global::{sync_all, CONFIG, CONN, QUESTS},
     model::{
@@ -116,9 +116,13 @@ fn info(about: About) -> anyhow::Result<Request, !> {
                 )
             };
             Message::String(format!(
-                "Quest rank range: ★{lower} - ★{upper}\n{target}{excluded}",
-                lower = settings.range.lower,
-                upper = settings.range.upper,
+                "target quest rank: {ranks}\n{target}{excluded}",
+                ranks = settings
+                    .ranks
+                    .ranks
+                    .iter()
+                    .map(|rank| format!("★{rank}"))
+                    .join(", "),
                 target = target_quests,
                 excluded = excluded_quests,
             ))
@@ -275,14 +279,11 @@ pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
     let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
-    thread::spawn(move || {
+    let handle = thread::spawn(move || {
         let (lock, cvar) = &*pair2;
         loop {
             if let Ok(ref mut config) = conf.try_lock() {
-                config.settings.range = Range {
-                    lower: *selected.iter().min().unwrap(),
-                    upper: *selected.iter().max().unwrap(),
-                };
+                config.settings.ranks = TargetRank { ranks: selected };
                 let mut status = lock.lock().unwrap();
                 *status = JobStatus::ExitSuccess;
                 cvar.notify_one();
@@ -299,6 +300,7 @@ pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
         .unwrap();
     loop {
         if result.0.ne(&JobStatus::Pending) {
+            handle.join().unwrap();
             break;
         } else if result.1.timed_out() {
             bailout!(
@@ -318,7 +320,15 @@ pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
         .context("sync_all failed.")
     })?;
     Ok(Request::Message(Message::String(
-        CONFIG.lock().unwrap().settings.range.as_pretty_string(),
+        CONFIG
+            .lock()
+            .unwrap()
+            .settings
+            .ranks
+            .ranks
+            .iter()
+            .map(|rank| format!("★{rank}"))
+            .join(", "),
     )))
 }
 

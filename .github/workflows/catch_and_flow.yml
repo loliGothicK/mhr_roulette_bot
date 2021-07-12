@@ -55,4 +55,4 @@ jobs:
         run: |
           rustup update nightly
           rustup default nightly
-          cargo +nightly test -j8 --release --all-features
+          cargo +nightly test -j11 --release --all-features

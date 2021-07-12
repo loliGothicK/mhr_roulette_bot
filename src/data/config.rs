@@ -30,21 +30,14 @@ pub struct Config {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Settings {
-    pub range: Range,
+    pub ranks: TargetRank,
     pub target: Target,
     pub excluded: Excluded,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Range {
-    pub lower: usize,
-    pub upper: usize,
-}
-
-impl Range {
-    pub fn as_pretty_string(&self) -> String {
-        format!("Range = [★{} ~ ★{}]", self.lower, self.upper)
-    }
+pub struct TargetRank {
+    pub ranks: Vec<usize>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

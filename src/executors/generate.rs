@@ -29,7 +29,7 @@ use serenity::{builder::CreateEmbed, utils::Colour};
 use strum::IntoEnumIterator;
 
 use crate::{
-    data::{Monster, Order, Range, Weapon},
+    data::{Monster, Order, TargetRank, Weapon},
     error::{CommandError, QueryError},
     executors::utility::JobStatus,
     global::{CONFIG, CONN, OBJECTIVES, QUESTS},
@@ -108,8 +108,11 @@ fn generate_impl(gen_type: GenerateType) -> anyhow::Result<Request> {
         .join("\n");
     let response = match gen_type {
         GenerateType::Quest => {
-            let Range { lower, upper } = config.settings.range;
-            let quest = QUESTS[lower..upper]
+            let TargetRank { ref ranks } = config.settings.ranks;
+            let quest = ranks
+                .iter()
+                .map(|idx| &QUESTS[*idx])
+                .collect_vec()
                 .choose(&mut rng)
                 .map(|quests| quests.choose(&mut rng))
                 .flatten()
