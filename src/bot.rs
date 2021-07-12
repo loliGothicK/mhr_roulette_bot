@@ -25,11 +25,8 @@ use serenity::{
     model::{
         gateway::Ready,
         interactions::{
-            Interaction,
-            InteractionResponseType,
-            application_command::{
-                ApplicationCommand, ApplicationCommandOptionType,
-            }
+            application_command::{ApplicationCommand, ApplicationCommandOptionType},
+            Interaction, InteractionResponseType,
         },
     },
 };
@@ -48,10 +45,14 @@ use crate::{
     },
     parser::Parser,
 };
-use serenity::{builder::CreateEmbed, utils::Colour};
-use serenity::model::interactions::application_command::ApplicationCommandInteraction;
-use serenity::model::interactions::message_component::MessageComponentInteraction;
-use serenity::builder::CreateInteractionResponse;
+use serenity::{
+    builder::{CreateEmbed, CreateInteractionResponse},
+    model::interactions::{
+        application_command::ApplicationCommandInteraction,
+        message_component::MessageComponentInteraction,
+    },
+    utils::Colour,
+};
 
 pub trait MsgSender<Msg: Debug> {
     fn send_msg(self)
@@ -129,13 +130,19 @@ enum Interactions {
 }
 
 impl Interactions {
-    pub async fn create_interaction_response<F>(&self, http: impl AsRef<Http>, f: F) -> anyhow::Result<()>
-        where
-            F: FnOnce(&mut CreateInteractionResponse) -> &mut CreateInteractionResponse,
+    pub async fn create_interaction_response<F>(
+        &self,
+        http: impl AsRef<Http>,
+        f: F,
+    ) -> anyhow::Result<()>
+    where
+        F: FnOnce(&mut CreateInteractionResponse) -> &mut CreateInteractionResponse,
     {
         match self {
             Interactions::Command(command) => command.create_interaction_response(http, f).await?,
-            Interactions::Component(component) => component.create_interaction_response(http, f).await?,
+            Interactions::Component(component) => {
+                component.create_interaction_response(http, f).await?
+            }
         }
         Ok(())
     }
@@ -160,22 +167,33 @@ impl EventHandler for Handler {
     async fn interaction_create(&self, ctx: serenity::client::Context, interaction: Interaction) {
         let result = {
             if let Some(command) = interaction.clone().application_command() {
-                Some(command.data.parse()
-                    .and_then(|items| interaction_endpoint(&items))
-                    .map(|ok| (ok, Interactions::Command(command.clone())))
-                    .map_err(|err| (err, Interactions::Command(command.clone()))))
-            }
-            else if let Some(component) = interaction.clone().message_component() {
-                Some(component.data.parse()
-                    .and_then(|items| interaction_endpoint(&items))
-                    .map(|ok| (ok, Interactions::Component(component.clone())))
-                    .map_err(|err| (err, Interactions::Component(component.clone()))))
+                Some(
+                    command
+                        .data
+                        .parse()
+                        .and_then(|items| interaction_endpoint(&items))
+                        .map(|ok| (ok, Interactions::Command(command.clone())))
+                        .map_err(|err| (err, Interactions::Command(command.clone()))),
+                )
+            } else if let Some(component) = interaction.clone().message_component() {
+                Some(
+                    component
+                        .data
+                        .parse()
+                        .and_then(|items| interaction_endpoint(&items))
+                        .map(|ok| (ok, Interactions::Component(component.clone())))
+                        .map_err(|err| (err, Interactions::Component(component.clone()))),
+                )
             } else {
                 None
             }
         };
         // un-expected interaction => skip
-        let result = if result.is_none() { return; } else { result.unwrap() };
+        let result = if result.is_none() {
+            return;
+        } else {
+            result.unwrap()
+        };
         match result {
             Err((err, interactions)) => {
                 let mut embed = CreateEmbed::default();
@@ -251,22 +269,27 @@ impl EventHandler for Handler {
                                             })
                                         })
                                     }
-                                    request::Component::SelectMenu(options) => data
+                                    request::Component::SelectMenu {
+                                        custom_id,
+                                        min_value,
+                                        max_value,
+                                        options,
+                                    } => data
                                         .content("I'll stabilize select menu when it's documented.")
                                         .components(|components| {
                                             components.create_action_row(|act| {
                                                 act.create_select_menu(|select_menu| {
                                                     select_menu
                                                         .placeholder("選択肢がありません")
-                                                        .custom_id("select_menu")
-                                                        .min_values(1)
-                                                        .max_values(1)
+                                                        .custom_id(custom_id)
+                                                        .min_values(min_value)
+                                                        .max_values(max_value)
                                                         .options(|builder| {
-                                                            for _option in options {
-                                                                builder.create_option(|opt| {
-                                                                    opt.description("a")
-                                                                        .label("a")
-                                                                        .value("a")
+                                                            for opt in options {
+                                                                builder.create_option(|o| {
+                                                                    o.description(opt.description)
+                                                                        .value(opt.value)
+                                                                        .label(opt.label)
                                                                 });
                                                             }
                                                             builder
@@ -396,34 +419,6 @@ pub async fn prepare_bot_client() -> anyhow::Result<Client> {
                 o.name("range")
                     .description("Specify range of quest rank")
                     .kind(ApplicationCommandOptionType::SubCommand)
-                    .create_sub_option(|o| {
-                        o.name("lower")
-                            .description("lower bound")
-                            .kind(ApplicationCommandOptionType::String)
-                            .add_string_choice(1, 1)
-                            .add_string_choice(2, 2)
-                            .add_string_choice(3, 3)
-                            .add_string_choice(4, 4)
-                            .add_string_choice(5, 5)
-                            .add_string_choice(6, 6)
-                            .add_string_choice(7, 7)
-                            .add_string_choice("8（HR解放後）", 8)
-                            .required(true)
-                    })
-                    .create_sub_option(|o| {
-                        o.name("upper")
-                            .description("upper bound")
-                            .kind(ApplicationCommandOptionType::String)
-                            .add_string_choice(1, 1)
-                            .add_string_choice(2, 2)
-                            .add_string_choice(3, 3)
-                            .add_string_choice(4, 4)
-                            .add_string_choice(5, 5)
-                            .add_string_choice(6, 6)
-                            .add_string_choice(7, 7)
-                            .add_string_choice("8（HR解放後）", 8)
-                            .required(true)
-                    })
             })
             .create_option(|o| {
                 o.name("exclude")

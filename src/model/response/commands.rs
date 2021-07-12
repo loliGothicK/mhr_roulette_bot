@@ -64,7 +64,7 @@ pub(crate) enum About {
 pub(crate) enum SettingsSubCommands {
     Info(About),
     Members(Options, Vec<User>),
-    Range(i64, i64),
+    Range,
     Exclude(Options, Choices, String),
     Target(Options, Choices, String),
     Obliterate(Choices),

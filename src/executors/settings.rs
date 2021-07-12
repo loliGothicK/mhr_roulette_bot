@@ -43,7 +43,10 @@ use crate::{
 };
 use roulette_macros::bailout;
 
-use crate::concepts::SameAs;
+use crate::{
+    concepts::SameAs,
+    model::request::{Component, SelectMenuOption},
+};
 
 /// # settings command
 ///
@@ -74,7 +77,7 @@ pub fn settings(items: &[Response]) -> anyhow::Result<Request> {
     match items.translate_to::<SettingsSubCommands>()? {
         SettingsSubCommands::Info(choice) => Ok(info(choice).unwrap()),
         SettingsSubCommands::Members(opt, ref users) => members(opt, users.to_vec()),
-        SettingsSubCommands::Range(lower, upper) => range(lower, upper),
+        SettingsSubCommands::Range => range(),
         SettingsSubCommands::Exclude(opt, choice, arg) => exclude(opt, choice, arg),
         SettingsSubCommands::Target(opt, choice, arg) => target(opt, choice, arg),
         SettingsSubCommands::Obliterate(choice) => obliterate(choice),
@@ -268,8 +271,7 @@ fn members(opt: Options, users: Vec<User>) -> anyhow::Result<Request> {
     ))))
 }
 
-/// Sets the range of target quest rank static_cast `[lower, upper]`.
-fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
+pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
     let pair = Arc::new((Mutex::new(JobStatus::Pending), Condvar::new()));
     let pair2 = Arc::clone(&pair);
     let conf = Arc::clone(&*CONFIG);
@@ -278,8 +280,8 @@ fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
         loop {
             if let Ok(ref mut config) = conf.try_lock() {
                 config.settings.range = Range {
-                    lower: lower as usize,
-                    upper: upper as usize,
+                    lower: *selected.iter().min().unwrap(),
+                    upper: *selected.iter().max().unwrap(),
                 };
                 let mut status = lock.lock().unwrap();
                 *status = JobStatus::ExitSuccess;
@@ -318,6 +320,22 @@ fn range(lower: i64, upper: i64) -> anyhow::Result<Request> {
     Ok(Request::Message(Message::String(
         CONFIG.lock().unwrap().settings.range.as_pretty_string(),
     )))
+}
+
+/// Sets the range of target quest rank static_cast `[lower, upper]`.
+fn range() -> anyhow::Result<Request> {
+    Ok(Request::Components(Component::SelectMenu {
+        custom_id: "range".to_string(),
+        min_value: 1,
+        max_value: 8,
+        options: (1..9)
+            .map(|rank| SelectMenuOption {
+                description: "Enable quest rank".to_string(),
+                label: rank.to_string(),
+                value: rank.to_string(),
+            })
+            .collect_vec(),
+    }))
 }
 
 trait SmartCast<T> {

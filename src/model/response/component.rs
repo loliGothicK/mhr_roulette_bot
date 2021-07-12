@@ -17,4 +17,6 @@
  *
  */
 
-// Maybe I'll use Buttons, Select Menu, or something one day.
+pub enum ComponentMsg {
+    Range(Vec<usize>),
+}
