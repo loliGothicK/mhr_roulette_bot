@@ -104,10 +104,12 @@ impl Parser for ApplicationCommandInteractionData {
 impl Parser for MessageComponentInteractionData {
     fn parse(&self) -> anyhow::Result<Vec<(String, Response)>> {
         match self.component_type {
+            // [Buttons](https://discord.com/developers/docs/interactions/message-components#buttons)
             ComponentType::Button => Ok(vec![(
                 self.custom_id.clone(),
                 Response::Component(Component::Button(self.custom_id.clone())),
             )]),
+            // [Select Menus](https://discord.com/developers/docs/interactions/message-components#select-menus)
             ComponentType::SelectMenu => Ok(vec![(
                 self.custom_id.clone(),
                 Response::Component(Component::SelectMenu(self.values.clone())),
