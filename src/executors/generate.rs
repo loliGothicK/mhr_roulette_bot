@@ -109,7 +109,10 @@ fn generate_impl(gen_type: GenerateType) -> anyhow::Result<Request> {
     let response = match gen_type {
         GenerateType::Quest => {
             let TargetRank { ref ranks } = config.settings.ranks;
-            let quest = ranks.iter().map(|idx| &QUESTS[*idx]).collect_vec()
+            let quest = ranks
+                .iter()
+                .map(|idx| &QUESTS[*idx])
+                .collect_vec()
                 .choose(&mut rng)
                 .map(|quests| quests.choose(&mut rng))
                 .flatten()

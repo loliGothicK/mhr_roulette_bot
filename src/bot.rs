@@ -189,7 +189,7 @@ impl EventHandler for Handler {
             }
         };
         // un-expected interaction => skip
-        let result = if let Some (res) = result {
+        let result = if let Some(res) = result {
             res
         } else {
             return;

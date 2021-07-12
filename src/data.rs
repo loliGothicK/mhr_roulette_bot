@@ -17,7 +17,7 @@
  *
  */
 
-pub use config::{Config, Excluded, TargetRank, Settings, Target};
+pub use config::{Config, Excluded, Settings, Target, TargetRank};
 pub use monsters::Monster;
 pub use objectives::{Objective, Order};
 pub use quests::{Quest, QuestID};

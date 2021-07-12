@@ -117,7 +117,12 @@ fn info(about: About) -> anyhow::Result<Request, !> {
             };
             Message::String(format!(
                 "target quest rank: {ranks}\n{target}{excluded}",
-                ranks = settings.ranks.ranks.iter().map(|rank| format!("★{rank}")).join(", "),
+                ranks = settings
+                    .ranks
+                    .ranks
+                    .iter()
+                    .map(|rank| format!("★{rank}"))
+                    .join(", "),
                 target = target_quests,
                 excluded = excluded_quests,
             ))
@@ -315,7 +320,15 @@ pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
         .context("sync_all failed.")
     })?;
     Ok(Request::Message(Message::String(
-        CONFIG.lock().unwrap().settings.ranks.ranks.iter().map(|rank| format!("★{rank}")).join(", "),
+        CONFIG
+            .lock()
+            .unwrap()
+            .settings
+            .ranks
+            .ranks
+            .iter()
+            .map(|rank| format!("★{rank}"))
+            .join(", "),
     )))
 }
 
