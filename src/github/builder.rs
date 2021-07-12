@@ -255,7 +255,7 @@ impl Display for Body {
             backtrace
                 .as_ref()
                 .map(String::as_str)
-                .unwrap_or_else(|| &"Unavailable.")
+                .unwrap_or_else(|| "Unavailable.")
         );
         write!(f, "{}", body)
     }

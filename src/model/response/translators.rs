@@ -330,7 +330,7 @@ impl TranslateTo<ComponentMsg> for Response {
     {
         match self {
             Response::Component(Component::SelectMenu(msg)) => Ok(ComponentMsg::Range(
-                msg.into_iter()
+                msg.iter()
                     .map(|rank| {
                         rank.parse::<usize>()
                             .with_context(|| anyhow::anyhow!("parse failed"))
