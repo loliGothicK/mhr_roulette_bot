@@ -17,7 +17,7 @@
  *
  */
 
-type OptionValue = serenity::model::interactions::ApplicationCommandInteractionDataOptionValue;
+type OptionValue = serenity::model::interactions::application_command::ApplicationCommandInteractionDataOptionValue;
 
 #[derive(Debug, Clone)]
 pub enum SlashCommand {

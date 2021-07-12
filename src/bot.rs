@@ -25,8 +25,11 @@ use serenity::{
     model::{
         gateway::Ready,
         interactions::{
-            ApplicationCommand, ApplicationCommandOptionType, Interaction, InteractionData,
+            Interaction,
             InteractionResponseType,
+            application_command::{
+                ApplicationCommand, ApplicationCommandOptionType,
+            }
         },
     },
 };
@@ -46,6 +49,9 @@ use crate::{
     parser::Parser,
 };
 use serenity::{builder::CreateEmbed, utils::Colour};
+use serenity::model::interactions::application_command::ApplicationCommandInteraction;
+use serenity::model::interactions::message_component::MessageComponentInteraction;
+use serenity::builder::CreateInteractionResponse;
 
 pub trait MsgSender<Msg: Debug> {
     fn send_msg(self)
@@ -117,6 +123,24 @@ pub enum Msg {
     },
 }
 
+enum Interactions {
+    Command(ApplicationCommandInteraction),
+    Component(MessageComponentInteraction),
+}
+
+impl Interactions {
+    pub async fn create_interaction_response<F>(&self, http: impl AsRef<Http>, f: F) -> anyhow::Result<()>
+        where
+            F: FnOnce(&mut CreateInteractionResponse) -> &mut CreateInteractionResponse,
+    {
+        match self {
+            Interactions::Command(command) => command.create_interaction_response(http, f).await?,
+            Interactions::Component(component) => component.create_interaction_response(http, f).await?,
+        }
+        Ok(())
+    }
+}
+
 #[async_trait]
 impl EventHandler for Handler {
     async fn ready(&self, ctx: serenity::client::Context, ready: Ready) {
@@ -134,18 +158,26 @@ impl EventHandler for Handler {
     }
 
     async fn interaction_create(&self, ctx: serenity::client::Context, interaction: Interaction) {
-        let interaction_result = interaction
-            .data
-            .as_ref()
-            .map(|data| match data {
-                InteractionData::ApplicationCommand(command) => command.parse(),
-                InteractionData::MessageComponent(component) => component.parse(),
-            })
-            .transpose()
-            .and_then(|maybe_items| maybe_items.ok_or_else(|| anyhow!("no interaction data")))
-            .and_then(|items| interaction_endpoint(&items));
-        match interaction_result {
-            Err(err) => {
+        let result = {
+            if let Some(command) = interaction.clone().application_command() {
+                Some(command.data.parse()
+                    .and_then(|items| interaction_endpoint(&items))
+                    .map(|ok| (ok, Interactions::Command(command.clone())))
+                    .map_err(|err| (err, Interactions::Command(command.clone()))))
+            }
+            else if let Some(component) = interaction.clone().message_component() {
+                Some(component.data.parse()
+                    .and_then(|items| interaction_endpoint(&items))
+                    .map(|ok| (ok, Interactions::Component(component.clone())))
+                    .map_err(|err| (err, Interactions::Component(component.clone()))))
+            } else {
+                None
+            }
+        };
+        // un-expected interaction => skip
+        let result = if result.is_none() { return; } else { result.unwrap() };
+        match result {
+            Err((err, interactions)) => {
                 let mut embed = CreateEmbed::default();
                 embed
                     .colour(Colour::RED)
@@ -154,7 +186,7 @@ impl EventHandler for Handler {
 
                 let json = serde_json::to_string(&embed.0);
 
-                interaction
+                interactions
                     .create_interaction_response(&ctx.http, |response| {
                         response
                             .kind(InteractionResponseType::ChannelMessageWithSource)
@@ -175,10 +207,10 @@ impl EventHandler for Handler {
                     })
                     .await;
             }
-            Ok(response) => match response {
+            Ok((response, interactions)) => match response {
                 Request::Message(msg) => match msg {
                     Message::String(msg) => {
-                        interaction
+                        interactions
                             .create_interaction_response(&ctx.http, |response| {
                                 response
                                     .kind(InteractionResponseType::ChannelMessageWithSource)
@@ -191,7 +223,7 @@ impl EventHandler for Handler {
                     }
                     Message::Embed(embed) => {
                         let json = serde_json::to_string(&embed.0);
-                        interaction
+                        interactions
                             .create_interaction_response(&ctx.http, |response| {
                                 response
                                     .kind(InteractionResponseType::ChannelMessageWithSource)
@@ -204,7 +236,7 @@ impl EventHandler for Handler {
                     }
                 },
                 Request::Components(component) => {
-                    interaction
+                    interactions
                         .create_interaction_response(&ctx.http, |response| {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
@@ -249,11 +281,7 @@ impl EventHandler for Handler {
                         .send_msg();
                 }
                 Request::Update { .. } => {
-                    interaction
-                        .delete_original_interaction_response(&ctx.http)
-                        .await
-                        .map_err(|err| anyhow!("http error: {}", err))
-                        .send_msg();
+                    // TODO
                 }
             },
         }

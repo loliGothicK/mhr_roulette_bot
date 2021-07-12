@@ -18,10 +18,11 @@
  */
 
 use crate::model::response::{Component, Response, SlashCommand};
-use serenity::model::interactions::{
+use serenity::model::interactions::application_command::{
     ApplicationCommandInteractionData, ApplicationCommandInteractionDataOption,
-    ApplicationCommandOptionType, ComponentType, MessageComponent,
+    ApplicationCommandOptionType,
 };
+use serenity::model::interactions::message_component::{ComponentType, MessageComponentInteractionData};
 
 type DataOptions = Vec<ApplicationCommandInteractionDataOption>;
 
@@ -98,7 +99,7 @@ impl Parser for ApplicationCommandInteractionData {
 /// # Parse an Message Component
 /// Parse an interaction containing messages.
 /// More detail, see [DEVELOPER PORTAL](https://discord.com/developers/docs/interactions/message-components).
-impl Parser for MessageComponent {
+impl Parser for MessageComponentInteractionData {
     fn parse(&self) -> anyhow::Result<Vec<(String, Response)>> {
         match self.component_type {
             ComponentType::Button => Ok(vec![(

@@ -43,6 +43,7 @@ roulette_macros = { version = "0.1.0", path = "roulette_macros" }
 tracing-appender = "0.1.2"
 
 [dependencies.serenity]
-version = "0.10.8"
+git = "https://github.com/serenity-rs/serenity.git"
+branch = "current"
 default-features = false
 features = ["client", "gateway", "rustls_backend", "model", "unstable_discord_api"]

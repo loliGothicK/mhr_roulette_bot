@@ -28,7 +28,7 @@ use mhr_roulette::{
     github,
     github::CreateIssue,
     global,
-    stream::{prepare_bot_client, Msg},
+    bot::{prepare_bot_client, Msg},
 };
 use octocrab::OctocrabBuilder;
 use std::error::Error;

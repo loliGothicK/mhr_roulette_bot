@@ -24,7 +24,7 @@ use roulette_macros::{bailout, pretty_info};
 use serenity::model::{channel::PartialChannel, guild::Role, user::User};
 use std::collections::HashMap;
 
-type OptionValue = serenity::model::interactions::ApplicationCommandInteractionDataOptionValue;
+type OptionValue = serenity::model::interactions::application_command::ApplicationCommandInteractionDataOptionValue;
 
 impl<Target> TranslateTo<Vec<Target>> for &[Response]
 where
