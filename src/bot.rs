@@ -83,7 +83,7 @@ impl<T: Debug + Send + Sync + 'static> MsgSender<anyhow::Result<T>> for anyhow::
                         .send(Msg::Issue {
                             kind: "http error".into(),
                             tag: TriageTag::NotBad,
-                            cause: format!("{err}"),
+                            cause: format!("{err:?}"),
                             backtrace: format!("{}", err.backtrace()),
                         })
                         .await;
@@ -200,7 +200,7 @@ impl EventHandler for Handler {
                 embed
                     .colour(Colour::RED)
                     .title("INTERACTION ERROR:")
-                    .description(format!("{err}"));
+                    .description(format!("{err:?}"));
 
                 let json = serde_json::to_string(&embed.0);
 
