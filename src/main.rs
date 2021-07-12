@@ -24,11 +24,11 @@ use chrono;
 use chrono_tz::Asia::Tokyo;
 use http::header;
 use mhr_roulette::{
+    bot::{prepare_bot_client, Msg},
     error::TriageTag,
     github,
     github::CreateIssue,
     global,
-    stream::{prepare_bot_client, Msg},
 };
 use octocrab::OctocrabBuilder;
 use std::error::Error;

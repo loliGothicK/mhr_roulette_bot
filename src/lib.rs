@@ -41,6 +41,7 @@
 #![feature(fn_traits)]
 #![feature(box_syntax)]
 
+pub mod bot;
 pub mod build_info;
 pub mod concepts;
 pub mod data;
@@ -50,4 +51,3 @@ pub mod github;
 pub mod global;
 pub mod model;
 pub mod parser;
-pub mod stream;

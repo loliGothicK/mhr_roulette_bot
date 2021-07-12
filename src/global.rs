@@ -18,8 +18,8 @@
  */
 
 use crate::{
+    bot::Msg,
     data::{Config, Objective, Quest, Weapon},
-    stream::Msg,
 };
 use indexmap::map::IndexMap;
 use itertools::Itertools;
