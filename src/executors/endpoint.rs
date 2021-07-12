@@ -19,10 +19,10 @@
 
 use crate::{
     error::LogicError,
-    executors::*,
+    executors::{settings::range_interaction, *},
     model::{
         request::Request,
-        response::{Commands, Response},
+        response::{Commands, ComponentMsg, Response},
         translate::TranslateTo,
     },
 };
@@ -41,6 +41,10 @@ pub fn interaction_endpoint(items: &[(String, Response)]) -> anyhow::Result<Requ
                     Commands::Generate => generate(&option_values),
                     Commands::Statistics => statistics(options),
                     Commands::Version => Ok(version().unwrap()),
+                }
+            } else if let Ok(component) = first.1.translate_to::<ComponentMsg>() {
+                match component {
+                    ComponentMsg::Range(selected) => range_interaction(selected),
                 }
             } else {
                 let expr = stringify!(first);

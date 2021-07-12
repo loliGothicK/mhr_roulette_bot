@@ -269,22 +269,27 @@ impl EventHandler for Handler {
                                             })
                                         })
                                     }
-                                    request::Component::SelectMenu(options) => data
+                                    request::Component::SelectMenu {
+                                        custom_id,
+                                        min_value,
+                                        max_value,
+                                        options,
+                                    } => data
                                         .content("I'll stabilize select menu when it's documented.")
                                         .components(|components| {
                                             components.create_action_row(|act| {
                                                 act.create_select_menu(|select_menu| {
                                                     select_menu
                                                         .placeholder("選択肢がありません")
-                                                        .custom_id("select_menu")
-                                                        .min_values(1)
-                                                        .max_values(1)
+                                                        .custom_id(custom_id)
+                                                        .min_values(min_value)
+                                                        .max_values(max_value)
                                                         .options(|builder| {
-                                                            for _option in options {
-                                                                builder.create_option(|opt| {
-                                                                    opt.description("a")
-                                                                        .label("a")
-                                                                        .value("a")
+                                                            for opt in options {
+                                                                builder.create_option(|o| {
+                                                                    o.description(opt.description)
+                                                                        .value(opt.value)
+                                                                        .label(opt.label)
                                                                 });
                                                             }
                                                             builder
@@ -414,34 +419,6 @@ pub async fn prepare_bot_client() -> anyhow::Result<Client> {
                 o.name("range")
                     .description("Specify range of quest rank")
                     .kind(ApplicationCommandOptionType::SubCommand)
-                    .create_sub_option(|o| {
-                        o.name("lower")
-                            .description("lower bound")
-                            .kind(ApplicationCommandOptionType::String)
-                            .add_string_choice(1, 1)
-                            .add_string_choice(2, 2)
-                            .add_string_choice(3, 3)
-                            .add_string_choice(4, 4)
-                            .add_string_choice(5, 5)
-                            .add_string_choice(6, 6)
-                            .add_string_choice(7, 7)
-                            .add_string_choice("8（HR解放後）", 8)
-                            .required(true)
-                    })
-                    .create_sub_option(|o| {
-                        o.name("upper")
-                            .description("upper bound")
-                            .kind(ApplicationCommandOptionType::String)
-                            .add_string_choice(1, 1)
-                            .add_string_choice(2, 2)
-                            .add_string_choice(3, 3)
-                            .add_string_choice(4, 4)
-                            .add_string_choice(5, 5)
-                            .add_string_choice(6, 6)
-                            .add_string_choice(7, 7)
-                            .add_string_choice("8（HR解放後）", 8)
-                            .required(true)
-                    })
             })
             .create_option(|o| {
                 o.name("exclude")

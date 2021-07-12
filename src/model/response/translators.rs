@@ -18,7 +18,14 @@
  */
 
 use super::{commands::*, Response, SlashCommand};
-use crate::{concepts::SameAs, error::LogicError, model::translate::TranslateTo};
+use crate::{
+    concepts::SameAs,
+    error::LogicError,
+    model::{
+        response::{Component, ComponentMsg},
+        translate::TranslateTo,
+    },
+};
 use anyhow::Context;
 use roulette_macros::{bailout, pretty_info};
 use serenity::model::{channel::PartialChannel, guild::Role, user::User};
@@ -218,13 +225,8 @@ impl TranslateTo<SettingsSubCommands> for &[Response] {
                     users.translate_to::<Vec<User>>()?,
                 ))
             }
-            [Response::SlashCommand(SlashCommand::SubCommand(sub_cmd)), lower, upper]
-                if sub_cmd == "range" =>
-            {
-                Ok(SettingsSubCommands::Range(
-                    lower.translate_to::<i64>()?,
-                    upper.translate_to::<i64>()?,
-                ))
+            [Response::SlashCommand(SlashCommand::SubCommand(sub_cmd))] if sub_cmd == "range" => {
+                Ok(SettingsSubCommands::Range)
             }
             [Response::SlashCommand(SlashCommand::SubCommand(sub_cmd)), option, choice, arg]
                 if sub_cmd == "exclude" =>
@@ -317,6 +319,28 @@ impl TranslateTo<StatisticsSubCommands> for &[(String, Response)] {
                     }
                 );
             }
+        }
+    }
+}
+
+impl TranslateTo<ComponentMsg> for Response {
+    fn translate_to<T>(&self) -> anyhow::Result<ComponentMsg>
+    where
+        T: SameAs<ComponentMsg>,
+    {
+        match self {
+            Response::Component(Component::SelectMenu(msg)) => Ok(ComponentMsg::Range(
+                msg.into_iter()
+                    .map(|rank| {
+                        rank.parse::<usize>()
+                            .with_context(|| anyhow::anyhow!("parse failed"))
+                    })
+                    .collect::<anyhow::Result<Vec<_>>>()?,
+            )),
+            unknown => Err(anyhow::anyhow!(
+                "ERROR: cannot translate to Commands {:?}",
+                unknown
+            )),
         }
     }
 }
