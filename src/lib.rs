@@ -38,8 +38,6 @@
 #![feature(async_closure)]
 #![feature(backtrace)]
 #![feature(type_name_of_val)]
-#![feature(fn_traits)]
-#![feature(box_syntax)]
 
 pub mod bot;
 pub mod build_info;
