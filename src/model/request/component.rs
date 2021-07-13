@@ -21,10 +21,14 @@ use crate::concepts::{Condition, Satisfied};
 
 #[derive(Debug)]
 pub enum Component {
-    Buttons(Buttons),
-    #[allow(dead_code)]
+    Buttons {
+        content: String,
+        buttons: Buttons,
+    },
     SelectMenu {
         custom_id: String,
+        content: String,
+        placeholder: String,
         min_value: u64,
         max_value: u64,
         options: Vec<SelectMenuOption>,

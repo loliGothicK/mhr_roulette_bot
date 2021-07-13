@@ -336,6 +336,8 @@ pub fn range_interaction(selected: Vec<usize>) -> anyhow::Result<Request> {
 fn range() -> anyhow::Result<Request> {
     Ok(Request::Components(Component::SelectMenu {
         custom_id: "range".to_string(),
+        content: "Choose ranks to enable".to_string(),
+        placeholder: "Click me".to_string(),
         min_value: 1,
         max_value: 8,
         options: (1..9)

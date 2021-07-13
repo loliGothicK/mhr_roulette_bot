@@ -259,8 +259,8 @@ impl EventHandler for Handler {
                             response
                                 .kind(InteractionResponseType::ChannelMessageWithSource)
                                 .interaction_response_data(|data| match component {
-                                    request::Component::Buttons(buttons) => {
-                                        data.content("Hello Button.").components(|components| {
+                                    request::Component::Buttons { content, buttons } => {
+                                        data.content(content).components(|components| {
                                             components.create_action_row(|action_row| {
                                                 for button in buttons.into_iter() {
                                                     action_row.add_button(button);
@@ -271,32 +271,32 @@ impl EventHandler for Handler {
                                     }
                                     request::Component::SelectMenu {
                                         custom_id,
+                                        content,
+                                        placeholder,
                                         min_value,
                                         max_value,
                                         options,
-                                    } => data
-                                        .content("I'll stabilize select menu when it's documented.")
-                                        .components(|components| {
-                                            components.create_action_row(|act| {
-                                                act.create_select_menu(|select_menu| {
-                                                    select_menu
-                                                        .placeholder("選択肢がありません")
-                                                        .custom_id(custom_id)
-                                                        .min_values(min_value)
-                                                        .max_values(max_value)
-                                                        .options(|builder| {
-                                                            for opt in options {
-                                                                builder.create_option(|o| {
-                                                                    o.description(opt.description)
-                                                                        .value(opt.value)
-                                                                        .label(opt.label)
-                                                                });
-                                                            }
-                                                            builder
-                                                        })
-                                                })
+                                    } => data.content(content).components(|components| {
+                                        components.create_action_row(|act| {
+                                            act.create_select_menu(|select_menu| {
+                                                select_menu
+                                                    .placeholder(placeholder)
+                                                    .custom_id(custom_id)
+                                                    .min_values(min_value)
+                                                    .max_values(max_value)
+                                                    .options(|builder| {
+                                                        for opt in options {
+                                                            builder.create_option(|o| {
+                                                                o.description(opt.description)
+                                                                    .value(opt.value)
+                                                                    .label(opt.label)
+                                                            });
+                                                        }
+                                                        builder
+                                                    })
                                             })
-                                        }),
+                                        })
+                                    }),
                                 })
                         })
                         .await
